@@ -850,6 +850,21 @@
   }
 
   // ---------------------------------------------------------------- HUD + art
+  // One gauge on the rail: the bar under the number, and the low-state colour.
+  function meter(key, value, low) {
+    const bar = $("hud" + key + "Bar");
+    if (bar) {
+      bar.style.width = Math.max(0, Math.min(100, value)) + "%";
+      bar.className = "bar-fill" + (low ? " warn" : "");
+    }
+    flagLow("hud" + key, low);
+  }
+  function flagLow(id, low) {
+    const el = $(id);
+    const box = el && el.parentElement;
+    if (box && box.classList) box.classList.toggle("low", !!low);
+  }
+
   function hud() {
     if (!S) return;
     $("hudMiles").textContent = Math.max(0, Math.round(destMile() - S.mile)).toLocaleString();
@@ -861,6 +876,13 @@
     $("hudEnergy").textContent = Math.round(S.energy);
     $("hudVehicle").textContent = S.onFoot ? "FOOT" : Math.round(S.vehicle) + "%";
     $("hudStress").textContent = Math.round(S.stress);
+    // the meters under each number, and a warning colour when one is getting low
+    meter("Health", S.health, S.health < 30);
+    meter("Energy", S.energy, S.energy < 25);
+    meter("Vehicle", S.onFoot ? 0 : S.vehicle, !S.onFoot && S.vehicle < 30);
+    meter("Stress", S.stress, S.stress > 70);
+    flagLow("hudFuel", !S.onFoot && fuelPct() < 20);
+    flagLow("hudCash", S.cash < 25);
     $("hudClock").textContent = `D${dayNum()} ${clockText()}`;
     $("hudRegion").textContent = regionInfo().name;
     const nn = nextNode();
@@ -868,6 +890,18 @@
   }
 
   let scroll = 0, visualZ = 0, weather = { kind: "clear", until: 0 }, glint = null;
+  let view = store.get("ome-view") || "cockpit";      // cockpit or chase
+
+  // How much town is in sight: outskirts build up before a stop and fall away
+  // behind it, which is what makes arriving somewhere feel like arriving.
+  function townNear() {
+    if (!S) return 0;
+    const n = nextNode(), p = prevNode();
+    const ahead = n ? n.mile - S.mile : 999;
+    const behind = p ? S.mile - p.mile : 999;
+    const near = Math.min(ahead, behind);
+    return Math.max(0, 1 - near / 14);
+  }
   // how the car rides: lean through a curve, drop over a crest, kick on a seam
   let sway = 0, pitch = 0, bump = 0, bumpV = 0, lastSeg = -1;
 
@@ -941,33 +975,14 @@
       tempPct: S ? clamp(0.35 + (grade() === "climb" ? 0.28 : 0) + (100 - S.vehicle) / 240, 0, 1) : 0.4,
       odo: S ? S.odo : 0,
       wipers: wx === "rain",
-      grime: S ? Math.min(1, S.grime || 0) : 0
+      grime: S ? Math.min(1, S.grime || 0) : 0,
+      vehicleId: S ? S.vehicleId : "ranger",
+      view,
+      urban: S ? townNear() : 0
     };
     ROAD.draw(ctx, w, h, st);
 
-    if (wx === "rain" || wx === "snow") {
-      const n = wx === "rain" ? 70 : 45;
-      ctx.strokeStyle = wx === "rain" ? "rgba(200,215,235,0.4)" : "rgba(255,255,255,0.7)";
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.lineWidth = 1.2;
-      for (let i = 0; i < n; i++) {
-        const sx = (i * 137 + scroll * (wx === "rain" ? 22 : 5)) % (w + 60) - 30;
-        const sy = (i * 71 + scroll * (wx === "rain" ? 42 : 9)) % (h * 0.7);
-        if (wx === "rain") { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - 4, sy + 13); ctx.stroke(); }
-        else { ctx.beginPath(); ctx.arc(sx, sy, 1.8, 0, Math.PI * 2); ctx.fill(); }
-      }
-    }
-
-    if (S && S.onFoot) {
-      ctx.fillStyle = "rgba(10,12,18,0.5)";
-      ctx.fillRect(0, h * 0.93, w, h * 0.07);
-      ctx.fillStyle = "#c9cfd6";
-      ctx.font = "700 12px Overpass, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("ON FOOT", w / 2, h * 0.975);
-    } else {
-      ROAD.drawCab(ctx, w, h, st);
-    }
+    ROAD.drawCab(ctx, w, h, st);          // weather on the glass, or the vehicle itself
 
     if (S && !S.onFoot && travelling && !glint && Math.random() < 0.0012) {
       glint = { x: w * (0.6 + Math.random() * 0.3), y: h * (0.52 + Math.random() * 0.09), life: 3 };
@@ -1356,6 +1371,11 @@
   $("btnSpeed").addEventListener("click", () => {
     speed = speed === 1 ? 2 : speed === 2 ? 4 : speed === 4 ? 8 : 1;
     $("btnSpeed").textContent = speed + "×";
+  });
+  $("btnView").addEventListener("click", () => {
+    view = view === "cockpit" ? "chase" : "cockpit";
+    store.set("ome-view", view);
+    $("btnView").textContent = view === "cockpit" ? "Cockpit" : "Chase";
   });
   $("btnLog").addEventListener("click", renderLog);
   $("btnRadio").addEventListener("click", () => {

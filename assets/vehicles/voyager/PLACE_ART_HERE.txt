@@ -1,0 +1,1 @@
+Drop rear.webp and cockpit.webp here. See assets/README.md

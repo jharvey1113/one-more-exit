@@ -1,0 +1,1 @@
+Drop far.webp / mid.webp / near.webp / foreground.webp here. See assets/README.md
