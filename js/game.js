@@ -26,6 +26,7 @@
   const saveAccount = () => store.set(ACCOUNT_KEY, account);
 
   let S = null, travelling = false, speed = 1, lastFrame = 0, raf = 0, pendingLot = null;
+  const PACE = 0.5;            // game minutes per real second at 1x
 
   // ---------------------------------------------------------------- helpers
   const nodes = () => C.route.nodes;
@@ -119,7 +120,12 @@
       health: 100, energy: 100, stress: 10, vehicle: 86,
       mile: 0, minutes: 8 * 60, inventory: { water: 1, food: 1 },
       log: [], souvenirs: [], seen: {}, spent: 0, fuelUsed: 0, events: 0,
-      onFoot: false, footMiles: 0, odo: 0, done: false, visits: {}
+      onFoot: false, footMiles: 0, odo: 0, done: false, visits: {},
+      // every trip rolls its own taste in encounters, so no two runs line up
+      evBias: Object.fromEntries(C.events.map(e => [e.id, 0.45 + Math.random() * 1.5])),
+      firstEventMile: 80 + Math.random() * 110,
+      nextVignetteMile: 6 + Math.random() * 14,
+      lastKind: null
     };
     show("outfit");
     renderShop();
@@ -176,15 +182,26 @@
   }
 
   // ---------------------------------------------------------------- travel
+  // The view keeps rendering whether or not the wheels are turning, so a paused
+  // road still looks like a road and the light still moves on it.
+  function keepDrawing() { if (!raf) raf = requestAnimationFrame(frame); }
   function setTravel(go) {
     travelling = go;
     $("btnGo").textContent = go ? "Pause" : (S.onFoot ? "Walk" : "Drive");
-    if (go) { MUS.start(); lastFrame = performance.now(); raf = requestAnimationFrame(frame); }
-    else cancelAnimationFrame(raf);
+    if (go) MUS.start();
+    lastFrame = performance.now();
+    keepDrawing();
   }
-  const stopTravel = () => { travelling = false; cancelAnimationFrame(raf); };
+  const stopTravel = () => { travelling = false; };
 
+  let frameErrors = 0;
   function frame(now) {
+    try { tickFrame(now); }
+    catch (e) { if (frameErrors++ < 3) console.error("frame error", e); }
+    raf = requestAnimationFrame(frame);       // one bad frame never ends the trip
+  }
+
+  function tickFrame(now) {
     const dt = Math.min((now - lastFrame) / 1000, 0.05);
     lastFrame = now;
     if (travelling) advance(dt);
@@ -196,11 +213,12 @@
       AMB.update({ moving: travelling, mph, condition: S.vehicle, weather: weatherNow(),
                    onFoot: S.onFoot, engineLoad: grade() === "climb" ? 1 : 0 });
     }
-    raf = requestAnimationFrame(frame);
   }
 
   function advance(dt) {
-    const mins = dt * 20 * speed;
+    // The clock is deliberately slow: at 1x a real minute is about twenty-five
+    // minutes of driving, so a state takes an evening and the country takes weeks.
+    const mins = dt * PACE * speed;
     const mph = S.onFoot ? 3
       : 58 * (grade() === "climb" ? 0.9 : 1) * (S.vehicle < 40 ? 0.72 : 1) * (S.vehicle < 18 ? 0.62 : 1) * (isNight() ? 0.85 : 1);
     const miles = (mph / 60) * mins;
@@ -295,6 +313,7 @@
       return openStop(due);
     }
     maybeEvent();
+    maybeVignette();
     radioTick();
     if (Math.random() < 0.004) { syncMood(); pushProgress(); }
   }
@@ -335,17 +354,54 @@
     for (const x of list) { roll -= (x.w || x.weight || 1); if (roll <= 0) return x; }
     return list[list.length - 1];
   };
-  // Encounters are paced by distance, not by frames, so speed never floods you.
+  // Small moments that don't stop the car. Most of the road is these.
+  function maybeVignette() {
+    const V = window.OME_VIGNETTES;
+    if (!V || !travelling || !$("eventCard").hidden) return;
+    if (S.mile < (S.nextVignetteMile || 0)) return;
+    S.nextVignetteMile = S.mile + 8 + Math.random() * 26;
+    const pool = V.any.concat(V[region()] || [], isNight() ? V.night : []);
+    const line = pool[Math.floor(Math.random() * pool.length)];
+    if (line && line !== S.lastVignette) { S.lastVignette = line; flash(line); }
+  }
+
+  // Encounters are paced by distance, not by frames, so speed never floods you,
+  // and the opening stretch is deliberately uneventful — you get to just drive.
   function maybeEvent() {
     if (!$("eventCard").hidden) return;
-    if (S.nextEventMile == null) S.nextEventMile = S.mile + 55 + Math.random() * 70;
+    if (S.nextEventMile == null) S.nextEventMile = S.firstEventMile || 100;
     if (S.mile < S.nextEventMile) return;
-    if (S.minutes - (S.lastEventAt || -999) < 90) return;   // at least an hour and a half apart
-    S.lastEventAt = S.minutes;
-    S.nextEventMile = S.mile + 75 + Math.random() * 110;
+    if (S.minutes - (S.lastEventAt || -999) < 150) return;  // never two in the same couple of hours
+
     const c = ctxNow();
-    const pool = C.events.filter(e => eligible(e, c) && !(e.requires || {}).stopped && !(e.requires || {}).service);
-    if (pool.length) fireEvent(pickWeighted(pool), c);
+    const pool = C.events.filter(e => {
+      const r = e.requires || {};
+      if (r.stopped || r.service) return false;
+      if (!eligible(e, c)) return false;
+      // nothing mechanical while the vehicle is still healthy and the trip is young
+      if (e.kind === "mech" && S.mile < 220 && S.vehicle > 72) return false;
+      return true;
+    });
+    if (!pool.length) return;
+
+    const recent = account.recentEvents || [];
+    const weightOf = e => (e.weight || 1)
+      * ((S.evBias || {})[e.id] || 1)                      // this run's taste
+      * (recent.includes(e.id) ? 0.22 : 1)                 // seen it last trip
+      * (e.kind && e.kind === S.lastKind ? 0.3 : 1)        // not the same sort twice
+      * (e.kind === "mech" ? 0.55 + (100 - S.vehicle) / 90 : 1);
+    const total = pool.reduce((s, e) => s + weightOf(e), 0);
+    let roll = Math.random() * total, ev = pool[pool.length - 1];
+    for (const e of pool) { roll -= weightOf(e); if (roll <= 0) { ev = e; break; } }
+
+    S.lastEventAt = S.minutes;
+    S.lastKind = ev.kind || null;
+    // spacing widens on empty country and tightens the deeper east you get
+    const spread = S.mile < 400 ? 130 : S.mile < 1200 ? 95 : 75;
+    S.nextEventMile = S.mile + spread + Math.random() * (spread * 1.6);
+    account.recentEvents = [ev.id].concat(recent).slice(0, 10);
+    saveAccount();
+    fireEvent(ev, c);
   }
   function fireEvent(ev, c) {
     S.seen[ev.id] = true;
@@ -547,8 +603,16 @@
       S.health = clamp(S.health + (has("blanket") ? 4 : 0), 0, 100);
       S.minutes += 6 * 60; award("luxury"); refreshStop(n);
     }));
-    if (n.kind === "settlement") {
-      const pay = 55 + (S.skills.mechanical + S.skills.social + S.skills.firstAid + S.skills.outdoors) * 9 + Math.floor(Math.random() * 40);
+    // Money has to come from somewhere, so anywhere with people has work.
+    if (n.kind === "settlement" || n.services.includes("shop") || n.services.includes("repair")) {
+      const rate = 55 + (S.skills.mechanical + S.skills.social + S.skills.firstAid + S.skills.outdoors) * 9;
+      const short = Math.round(rate * 0.38) + Math.floor(Math.random() * 15);
+      acts.push(action(`Work a few hours — about $${short}`, "Unload a truck, patch a roof, hold a flashlight for somebody.", S.energy > 15, () => {
+        S.cash += short; S.minutes += 4 * 60; S.energy = clamp(S.energy - 14, 0, 100);
+        logLine(`Picked up a few hours of work in ${n.name} for $${short}.`);
+        refreshStop(n);
+      }));
+      const pay = rate + Math.floor(Math.random() * 40);
       acts.push(action(`Work a day here — about $${pay}`, "Hands are needed everywhere. It costs a day and most of your energy.", S.energy > 25, () => {
         S.cash += pay; S.minutes += 11 * 60; S.energy = clamp(S.energy - 35, 0, 100);
         S.stress = clamp(S.stress + 6, 0, 100);
@@ -804,6 +868,26 @@
   }
 
   let scroll = 0, visualZ = 0, weather = { kind: "clear", until: 0 }, glint = null;
+  // how the car rides: lean through a curve, drop over a crest, kick on a seam
+  let sway = 0, pitch = 0, bump = 0, bumpV = 0, lastSeg = -1;
+
+  function ride(dt, mph) {
+    const seg = Math.floor(visualZ / ROAD.SEG);
+    const curve = ROAD.curveAt(seg) + ROAD.curveAt(seg + 4) * 0.6;
+    const slope = (ROAD.hillAt(seg + 6) - ROAD.hillAt(seg)) / 9000;
+    const drive = Math.min(1, mph / 55);
+    sway += ((-curve * 0.9 * drive) - sway) * Math.min(1, dt * 2.4);
+    pitch += ((slope * 0.11 * drive) - pitch) * Math.min(1, dt * 2.2);
+    if (seg !== lastSeg) {                       // expansion joints, once each
+      if (lastSeg >= 0 && ROAD.seamAt(seg)) bumpV -= (0.0016 + Math.random() * 0.0016) * drive;
+      if (lastSeg >= 0 && Math.random() < 0.05) bumpV -= 0.0011 * drive;   // a patch, a pothole
+      lastSeg = seg;
+    }
+    bumpV += (-bump * 240 - bumpV * 13) * dt;    // a tired suspension settling
+    bump += bumpV * dt;
+    const idle = mph > 1 ? Math.sin(performance.now() / 420) * 0.0012 : 0;
+    return { sway, pitch: pitch + bump + idle };
+  }
 
   function weatherNow() {
     if (!S) return "clear";
@@ -839,9 +923,12 @@
       visualZ += dt * mph * 1.467 * Math.min(speed, 2.5);
     }
 
+    const motion = ride(dt, travelling ? mph : 0);
     const st = {
       mile: S ? S.mile : 0,
       camZ: visualZ,
+      sway: motion.sway,
+      pitch: motion.pitch,
       hour,
       region: S ? region() : "desert",
       colors: S ? regionInfo() : C.regions.desert,
@@ -906,6 +993,7 @@
       ctx.textAlign = "left";
       ctx.fillText(wx.toUpperCase(), 15, 22);
     }
+    ROAD.grade(ctx, w, h, st.night);
   }
 
   $("road").addEventListener("click", e => {
