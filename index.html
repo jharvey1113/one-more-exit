@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#14361f">
-<meta name="description" content="A road-trip survival game. Phoenix to Flagstaff, and whatever else is out there.">
+<meta name="theme-color" content="#0f1116">
+<meta name="description" content="Phoenix to Boston across a country that mostly still works. A long road-trip survival game.">
 <title>One More Exit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,15 +12,14 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23165c32'/%3E%3Crect x='5' y='7' width='22' height='18' rx='2' fill='none' stroke='white' stroke-width='2'/%3E%3Ctext x='16' y='20' text-anchor='middle' font-size='10' font-family='sans-serif' font-weight='700' fill='white'%3E414%3C/text%3E%3C/svg%3E">
 <style>
   :root {
-    --road: #14161c;
-    --asphalt: #1c1f27;
+    --road: #0f1116;
     --sign: #165c32;
-    --sign-2: #0f4526;
-    --ink: #f2f4ef;
-    --muted: #a9b2ad;
-    --amber: #f2b134;
+    --ink: #eef1ec;
+    --muted: #9aa49d;
+    --amber: #e8b04b;
     --rust: #c8442f;
-    --sand: #e8d9b5;
+    --panel: #171a21;
+    --line: #262b33;
     --body: "Overpass", system-ui, sans-serif;
     --type: "Special Elite", "Courier New", monospace;
     color-scheme: dark;
@@ -28,278 +27,233 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: var(--road);
-    color: var(--ink);
-    font-family: var(--body);
-    font-size: 16px;
-    -webkit-text-size-adjust: 100%;
-    -webkit-tap-highlight-color: transparent;
+    background: var(--road); color: var(--ink); font-family: var(--body); font-size: 16px;
+    -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent;
   }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 14px 16px 28px; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 14px 16px 30px; }
   button { font: inherit; cursor: pointer; border: 0; }
   button:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
   [hidden] { display: none !important; }
+  a { color: var(--amber); }
 
-  /* highway signs */
   .sign {
-    background: var(--sign);
-    border: 3px solid #eef3ee;
-    border-radius: 10px;
-    box-shadow: inset 0 0 0 2px var(--sign), 0 6px 0 rgba(0,0,0,0.35);
-    padding: 14px 16px;
+    background: var(--sign); border: 3px solid #eef3ee; border-radius: 10px;
+    box-shadow: 0 6px 0 rgba(0,0,0,0.4); padding: 14px 16px;
   }
   .sign.exit { background: #16324f; }
   h1 {
-    font-family: var(--body);
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    font-size: clamp(30px, 8vw, 54px);
-    margin: 0;
-    line-height: 1;
-    text-transform: uppercase;
+    font-weight: 800; letter-spacing: 0.06em; font-size: clamp(28px, 7.5vw, 52px);
+    margin: 0; line-height: 1; text-transform: uppercase;
   }
-  h1 small { display: block; font-size: 0.33em; letter-spacing: 0.34em; margin-top: 10px; color: #cfe6d6; }
-  h2 { font-size: 20px; letter-spacing: 0.04em; margin: 0 0 10px; text-transform: uppercase; }
+  h1 small { display: block; font-size: 0.3em; letter-spacing: 0.3em; margin-top: 10px; color: #cfe6d6; }
+  h2 { font-size: 19px; letter-spacing: 0.04em; margin: 0 0 10px; text-transform: uppercase; }
   p { line-height: 1.55; }
-  .lede { color: var(--muted); max-width: 62ch; }
+  .lede { color: var(--muted); max-width: 64ch; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .spread { justify-content: space-between; }
   .stack { display: grid; gap: 14px; }
 
   .btn {
-    background: var(--amber);
-    color: #241a05;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 12px 22px;
-    border-radius: 8px;
-    box-shadow: 0 4px 0 #9c7112;
+    background: var(--amber); color: #241a05; font-weight: 800; letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 12px 22px; border-radius: 8px; box-shadow: 0 4px 0 #96731c;
   }
-  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #9c7112; }
-  .btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px #46504a; }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #96731c; }
+  .btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px #3c444d; }
   .btn.small { padding: 8px 14px; font-size: 14px; }
   .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 
-  /* cards for career + vehicle */
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 10px; }
   .card {
-    text-align: left;
-    background: #1e222b;
-    color: var(--ink);
-    border-radius: 10px;
-    padding: 12px;
-    display: grid;
-    gap: 4px;
-    box-shadow: inset 0 0 0 2px #2c333d;
+    text-align: left; background: var(--panel); color: var(--ink); border-radius: 10px;
+    padding: 12px; display: grid; gap: 4px; box-shadow: inset 0 0 0 2px var(--line);
   }
-  .card.on { box-shadow: inset 0 0 0 3px var(--amber); background: #252b36; }
-  .card-title { font-weight: 800; letter-spacing: 0.02em; }
+  .card.on { box-shadow: inset 0 0 0 3px var(--amber); background: #222733; }
+  .card-title { font-weight: 800; }
   .card-desc { color: var(--muted); font-size: 14px; }
   .card-meta { color: #8fa89a; font-size: 12px; }
 
   input[type="text"] {
-    font: inherit; color: var(--ink); background: #11141a;
-    border: 2px solid #2c333d; border-radius: 8px; padding: 10px 12px; width: 100%; max-width: 280px;
+    font: inherit; color: var(--ink); background: #0c0e13; border: 2px solid var(--line);
+    border-radius: 8px; padding: 10px 12px; width: 100%; max-width: 280px;
   }
 
-  /* shop */
   .shop-row {
-    display: grid;
-    grid-template-columns: 1.1fr 1.6fr auto auto;
-    gap: 10px;
-    align-items: center;
-    padding: 9px 10px;
-    border-radius: 8px;
-    background: #1a1e26;
+    display: grid; grid-template-columns: 1.1fr 1.7fr auto auto; gap: 10px; align-items: center;
+    padding: 9px 10px; border-radius: 8px; background: var(--panel);
   }
   .shop-row + .shop-row { margin-top: 6px; }
   .shop-name { font-weight: 600; }
   .shop-use { color: var(--muted); font-size: 13px; }
-  .shop-price { color: var(--sand); font-size: 13px; white-space: nowrap; }
+  .shop-price { color: #d9cba7; font-size: 13px; white-space: nowrap; }
   .shop-buttons { display: flex; align-items: center; gap: 8px; }
-  .mini { width: 30px; height: 30px; border-radius: 6px; background: #2c333d; color: var(--ink); font-size: 18px; line-height: 1; }
+  .mini { width: 30px; height: 30px; border-radius: 6px; background: #2b323c; color: var(--ink); font-size: 18px; line-height: 1; }
   .owned { min-width: 1.2em; text-align: center; font-variant-numeric: tabular-nums; }
-  @media (max-width: 620px) {
+  @media (max-width: 640px) {
     .shop-row { grid-template-columns: 1fr auto; }
     .shop-use { grid-column: 1 / -1; }
     .shop-price { grid-column: 1; }
   }
 
-  /* travel */
-  #road { display: block; width: 100%; height: min(46vh, 320px); border-radius: 10px; background: #0b1030; }
-  .hud {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-    gap: 8px;
-    margin-top: 10px;
-  }
-  .stat { background: #1a1e26; border-radius: 8px; padding: 8px 10px; }
-  .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; line-height: 1.1; }
-  .stat span { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
-  .bar { height: 6px; border-radius: 99px; background: #0f1218; margin-top: 6px; overflow: hidden; }
+  #road { display: block; width: 100%; height: min(44vh, 300px); border-radius: 10px; background: #0b1030; }
+  .hud { display: grid; grid-template-columns: repeat(auto-fit, minmax(86px, 1fr)); gap: 8px; margin-top: 10px; }
+  .stat { background: var(--panel); border-radius: 8px; padding: 8px 10px; }
+  .stat b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .stat span { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .bar { height: 6px; border-radius: 99px; background: #0b0d12; margin-top: 6px; overflow: hidden; }
   .bar-fill { height: 100%; background: var(--amber); }
   .bar-fill.warn { background: var(--rust); }
-  .nextsign { font-family: var(--body); font-weight: 700; letter-spacing: 0.06em; }
+  .nextsign { font-weight: 700; letter-spacing: 0.05em; }
+  .region { color: var(--muted); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; }
 
-  /* event card */
-  .overlay {
-    position: fixed; inset: 0; z-index: 30;
-    display: grid; place-items: center; padding: 16px;
-    background: rgba(6, 8, 12, 0.78);
-  }
+  .overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: rgba(5,6,10,0.82); }
   .event {
-    width: 100%; max-width: 520px;
-    background: #f4efe2; color: #16181c;
-    border-radius: 12px; padding: 18px;
-    box-shadow: 0 16px 40px rgba(0,0,0,0.5);
-    max-height: 88vh; overflow-y: auto;
+    width: 100%; max-width: 540px; background: #f2ece0; color: #15171b; border-radius: 12px;
+    padding: 18px; box-shadow: 0 16px 40px rgba(0,0,0,0.55); max-height: 88vh; overflow-y: auto;
   }
-  .event h3 {
-    font-family: var(--body); font-weight: 800; letter-spacing: 0.08em;
-    margin: 0 0 10px; font-size: 20px; text-transform: uppercase;
-  }
+  .event h3 { font-weight: 800; letter-spacing: 0.08em; margin: 0 0 10px; font-size: 20px; text-transform: uppercase; }
   .event p { margin: 0 0 14px; white-space: pre-line; }
-  .event .outcome { font-family: var(--type); background: #e6dcc4; padding: 12px; border-radius: 8px; }
-  .choice {
-    display: block; width: 100%; text-align: left;
-    background: #16181c; color: #f4efe2;
-    padding: 11px 13px; border-radius: 8px; margin-bottom: 8px;
-  }
-  .choice:hover { background: #26303a; }
+  .event .outcome { font-family: var(--type); background: #e4d9c1; padding: 12px; border-radius: 8px; }
+  .choice { display: block; width: 100%; text-align: left; background: #15171b; color: #f2ece0; padding: 11px 13px; border-radius: 8px; margin-bottom: 8px; }
+  .choice:hover { background: #262f39; }
 
-  /* stops */
   .action {
-    display: grid; gap: 2px; text-align: left; width: 100%;
-    background: #1a1e26; color: var(--ink);
-    padding: 12px 14px; border-radius: 8px;
-    box-shadow: inset 0 0 0 2px #2c333d;
+    display: grid; gap: 2px; text-align: left; width: 100%; background: var(--panel); color: var(--ink);
+    padding: 12px 14px; border-radius: 8px; box-shadow: inset 0 0 0 2px var(--line);
   }
   .action + .action { margin-top: 8px; }
   .action-label { font-weight: 700; }
   .action-sub { color: var(--muted); font-size: 13px; }
 
-  /* summary + log */
   .sum-title { font-weight: 800; letter-spacing: 0.08em; font-size: clamp(26px, 7vw, 42px); margin: 0 0 6px; }
   .sum-title.good { color: var(--amber); }
   .sum-title.bad { color: var(--rust); }
-  .sum-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed #2c333d; }
-  .sum-row b { font-variant-numeric: tabular-nums; }
-  .memorial { font-family: var(--type); background: #1a1e26; padding: 14px; border-radius: 8px; margin-top: 14px; line-height: 1.6; }
-  .log-line { font-family: var(--type); font-size: 14px; padding: 6px 0; border-bottom: 1px dashed #262c34; color: #d8dcd6; }
-  .ach { display: grid; gap: 1px; padding: 8px 10px; border-radius: 8px; background: #1a1e26; }
+  .sum-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--line); }
+  .sum-row b { font-variant-numeric: tabular-nums; text-align: right; }
+  .memorial { font-family: var(--type); background: var(--panel); padding: 14px; border-radius: 8px; margin-top: 14px; line-height: 1.6; }
+  .log-line { font-family: var(--type); font-size: 14px; padding: 6px 0; border-bottom: 1px dashed #222730; color: #d6dad4; }
+  .ach { display: grid; gap: 1px; padding: 8px 10px; border-radius: 8px; background: var(--panel); }
   .ach b { color: var(--muted); }
   .ach.got b { color: var(--amber); }
   .ach span { font-size: 13px; color: var(--muted); }
   .achs { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+  .checkpoint-note { color: #cfe6d6; font-size: 13px; margin: 8px 0 0; }
 
   .flash {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(12px);
-    background: var(--amber); color: #241a05; font-weight: 700;
-    padding: 10px 16px; border-radius: 999px; opacity: 0; pointer-events: none;
-    transition: opacity 0.25s, transform 0.25s; z-index: 40;
+    background: var(--amber); color: #241a05; font-weight: 700; padding: 10px 16px; border-radius: 999px;
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 40; text-align: center;
   }
   .flash.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+  footer { margin-top: 24px; color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <!-- ------------------------------------------------ title -->
   <section id="screen-title" class="stack">
-    <div class="sign">
-      <h1>One More Exit<small>Interstate 17 · Phoenix → Flagstaff</small></h1>
-    </div>
-    <p class="lede">A road trip is a simple thing. You have a vehicle, some money, a tank of gas and 146 miles of desert
-      climbing four thousand feet into the pines. Manage fuel, cash, your own patience and a truck that is older than
-      it looks. Get there.</p>
+    <div class="sign"><h1>One More Exit<small>Phoenix → Boston · 2,762 miles</small></h1></div>
+    <p class="lede">The country still works, mostly. Power comes on for a few hours. Some gas stations have fuel and some
+      have a sign about it. There are towns with markets and towns with nobody, and a great deal of road in between.
+      You are going to Boston. The only real goal is to arrive in one piece.</p>
+    <p class="lede">Settlements are checkpoints: reach one and you can always start again from there. Vehicles can be
+      traded, lost, or left behind — you can walk, if it comes to that.</p>
     <div class="row">
-      <button class="btn" id="btnNew" type="button">New trip</button>
-      <button class="btn ghost" id="btnResume" type="button" hidden>Resume trip</button>
+      <button class="btn" id="btnNew" type="button">New run</button>
+      <button class="btn ghost" id="btnResume" type="button" hidden>Resume</button>
       <button class="btn ghost small" id="btnAccount" type="button">Traveler file</button>
-      <button class="btn ghost small" id="btnSound" type="button" aria-pressed="true">Sound on</button>
+      <button class="btn ghost small" id="btnMusic" type="button" aria-pressed="true">Music on</button>
     </div>
 
     <div class="sign exit" id="accountPanel" hidden>
       <h2>Traveler file</h2>
       <div class="hud">
         <div class="stat"><b id="accLevel">1</b><span>Level</span></div>
-        <div class="stat"><b id="accTrips">0 / 0</b><span>Arrived / trips</span></div>
+        <div class="stat"><b id="accRuns">0 / 0</b><span>Arrived / runs</span></div>
         <div class="stat"><b id="accMiles">0</b><span>Lifetime miles</span></div>
+        <div class="stat"><b id="accBest">0</b><span>Furthest east</span></div>
         <div class="stat"><b id="accAchCount">0 / 11</b><span>Achievements</span></div>
       </div>
+      <h2 style="margin-top:14px">Checkpoints</h2>
+      <div id="cpList"></div>
       <h2 style="margin-top:14px">Achievements</h2>
       <div class="achs" id="accAch"></div>
+      <h2 style="margin-top:14px">Souvenirs</h2>
+      <div id="accSouvenirs"></div>
       <h2 style="margin-top:14px">Memorials</h2>
       <div id="accMemorials"></div>
     </div>
+    <footer>Looking for the quick games instead? <a href="https://jharvey1113.github.io/brickfall/">Brickfall</a>.</footer>
   </section>
 
-  <!-- ------------------------------------------------ create -->
   <section id="screen-create" class="stack" hidden>
     <div class="sign"><h2 style="margin:0">Who is driving?</h2></div>
-    <div class="row">
-      <input type="text" id="travelerName" maxlength="18" placeholder="Name" autocomplete="off">
-    </div>
-    <h2>Career</h2>
+    <div class="row"><input type="text" id="travelerName" maxlength="18" placeholder="Name" autocomplete="off"></div>
+    <h2>What you did before</h2>
     <div class="cards" id="careerList"></div>
-    <h2>Vehicle</h2>
+    <h2>What you're driving</h2>
     <div class="cards" id="vehicleList"></div>
     <div class="row">
-      <button class="btn" id="btnBegin" type="button">Go shopping</button>
+      <button class="btn" id="btnBegin" type="button">Load up</button>
       <button class="btn ghost small" id="btnBackTitle" type="button">Back</button>
     </div>
   </section>
 
-  <!-- ------------------------------------------------ outfit -->
   <section id="screen-outfit" class="stack" hidden>
     <div class="sign spread row">
-      <h2 style="margin:0">Load up in Phoenix</h2>
-      <div class="row">
-        <span>Cash <b id="shopCash">$0</b></span>
-        <span>Cargo <b id="shopBulk">0</b></span>
-      </div>
+      <h2 style="margin:0">Supplies</h2>
+      <div class="row"><span>Cash <b id="shopCash">$0</b></span><span>Cargo <b id="shopBulk">0</b></span></div>
     </div>
-    <p class="lede">Buy what you think you'll need. You can't buy judgment, but a spare tire is close.</p>
-    <button class="action" id="shopFuel" type="button"><span class="action-label">Top off the tank</span><span class="action-sub">Gas is cheapest here.</span></button>
+    <p class="lede">Fuel you carry is fuel nobody can refuse to sell you. Everything else is a guess about which kind of
+      trouble you'll get.</p>
+    <button class="action" id="shopFuel" type="button">
+      <span class="action-label" id="shopFuelLabel">Fill the tank</span>
+      <span class="action-sub" id="shopFuelSub"></span>
+    </button>
     <div id="shopList"></div>
     <div class="row"><button class="btn" id="btnLaunch" type="button">Hit the road</button></div>
   </section>
 
-  <!-- ------------------------------------------------ travel -->
   <section id="screen-travel" hidden>
-    <canvas id="road" aria-label="The highway ahead"></canvas>
+    <canvas id="road" aria-label="The road ahead"></canvas>
     <div class="hud">
-      <div class="stat"><b id="hudMiles">146</b><span>Miles left</span></div>
-      <div class="stat"><b id="hudFuel">55%</b><span>Fuel</span><div class="bar"><i class="bar-fill" id="hudFuelBar"></i></div></div>
+      <div class="stat"><b id="hudMiles">2,762</b><span>Miles to Boston</span></div>
+      <div class="stat"><b id="hudFuel">60%</b><span>Fuel</span><div class="bar"><i class="bar-fill" id="hudFuelBar"></i></div></div>
       <div class="stat"><b id="hudCash">$0</b><span>Cash</span></div>
       <div class="stat"><b id="hudHealth">100</b><span>Health</span></div>
       <div class="stat"><b id="hudEnergy">100</b><span>Energy</span></div>
-      <div class="stat"><b id="hudVehicle">88%</b><span>Vehicle</span></div>
+      <div class="stat"><b id="hudVehicle">86%</b><span>Vehicle</span></div>
       <div class="stat"><b id="hudStress">10</b><span>Stress</span></div>
-      <div class="stat"><b id="hudClock">8:00 AM</b><span>Clock</span></div>
+      <div class="stat"><b id="hudClock">D1 8:00 AM</b><span>Day / time</span></div>
     </div>
     <div class="row spread" style="margin-top:12px">
-      <span class="nextsign" id="hudNext"></span>
+      <span><span class="nextsign" id="hudNext"></span><br><span class="region" id="hudRegion"></span></span>
       <span class="row">
         <button class="btn small" id="btnGo" type="button">Pause</button>
         <button class="btn ghost small" id="btnSpeed" type="button">1×</button>
-        <button class="btn ghost small" id="btnLog" type="button">Trip log</button>
+        <button class="btn ghost small" id="btnLog" type="button">Log</button>
       </span>
     </div>
   </section>
 
-  <!-- ------------------------------------------------ stop -->
   <section id="screen-stop" class="stack" hidden>
     <div class="sign exit">
       <h2 style="margin:0" id="stopName">Exit</h2>
       <p style="margin:6px 0 0;color:#cfe6d6" id="stopMeta"></p>
+      <p class="checkpoint-note" id="stopCheckpoint" hidden>Checkpoint saved. You can start again from here.</p>
     </div>
     <div id="stopActions"></div>
-    <div class="row"><button class="btn" id="btnLeaveStop" type="button">Back on the highway</button></div>
+    <div class="row"><button class="btn" id="btnLeaveStop" type="button">Back on the road</button></div>
   </section>
 
-  <!-- ------------------------------------------------ summary -->
+  <section id="screen-lot" class="stack" hidden>
+    <div class="sign exit">
+      <h2 style="margin:0" id="lotName">Vehicle lot</h2>
+      <p style="margin:6px 0 0;color:#cfe6d6" id="lotMine"></p>
+    </div>
+    <div id="lotList"></div>
+    <div class="row"><button class="btn ghost" id="btnLotBack" type="button">Back to town</button></div>
+  </section>
+
   <section id="screen-summary" class="stack" hidden>
     <div class="sign">
       <h2 class="sum-title good" id="sumTitle">You made it</h2>
@@ -309,28 +263,27 @@
     <div class="row"><button class="btn" id="btnSumHome" type="button">Back to the start</button></div>
   </section>
 
-  <!-- ------------------------------------------------ log -->
   <section id="screen-log" class="stack" hidden>
-    <div class="sign"><h2 style="margin:0">Trip log</h2></div>
+    <div class="sign"><h2 style="margin:0">Log</h2></div>
     <div id="logList"></div>
     <div class="row"><button class="btn" id="btnLogBack" type="button">Back to the road</button></div>
   </section>
 </div>
 
-<!-- event overlay -->
 <div class="overlay" id="eventCard" hidden>
   <div class="event" role="dialog" aria-modal="true" aria-labelledby="eventTitle">
     <h3 id="eventTitle">Event</h3>
     <p id="eventText"></p>
     <div id="eventChoices"></div>
     <p class="outcome" id="eventOutcome"></p>
-    <button class="btn" id="eventClose" type="button" hidden>Keep driving</button>
+    <button class="btn" id="eventClose" type="button" hidden>Keep going</button>
   </div>
 </div>
 
 <div class="flash" id="flash"></div>
 
 <script src="js/content.js"></script>
+<script src="js/music.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

@@ -4,17 +4,19 @@ A road-trip survival game that runs in the browser.
 
 **Play:** https://jharvey1113.github.io/one-more-exit/
 
-You start in Phoenix with a used vehicle, a little money, and 146 miles of desert that climbs four thousand feet into the pines at Flagstaff. Manage fuel, cash, health, energy, stress and a vehicle that is older than it looks. Decide what to do when the check-engine light comes on, when a dust storm crosses the interstate, and when the only gas for thirty miles costs $5.19 a gallon.
+Phoenix to Boston: 2,762 miles across a country that mostly still works. Power comes on for a few hours a day. Some gas stations have fuel and some have a sign about it. Manage fuel, cash, health, energy, stress and a vehicle that is older than it looks. Decide what to do when the check-engine light comes on, when a dust storm crosses the interstate, and when the only gas for thirty miles costs $5.19 a gallon.
 
-## This build (vertical slice)
+## This build
 
-- Character creation: name, career (which sets starting cash and skills) and one of three vehicles
-- Supply shopping in Phoenix, limited by cargo space
-- A side-scrolling drive north: the scenery shifts from saguaro desert to juniper to pine, and from day to night
-- Stops at eight real I-17 exits for fuel, food, repairs, naps and motels
-- An event engine with roughly thirty written encounters that respond to mileage, elevation, time of day, season, vehicle condition, skills and inventory
-- Autosave: close the tab mid-trip and resume later
-- Arrival summary, a memorial when a trip ends badly, achievements, and an account that persists across trips
+- Character creation: name, a former career (starting cash and skills) and a vehicle
+- Supplies limited by cargo space; fuel you carry in cans is fuel nobody can refuse to sell you
+- A side-scrolling drive east through seven regions, from Sonoran desert to the Rust Belt to New England, day and night
+- Twenty-six stops: fuel that may or may not exist, food, repairs, beds, markets, paid work and vehicle lots
+- Vehicles can be traded, lost or abandoned — you can continue on foot at three miles an hour
+- Settlements are checkpoints: reach one and you can always start again from there
+- A data-driven event engine: encounters respond to region, mileage, time of day, fuel, vehicle condition, skills, inventory and things you've done before
+- An adaptive score that follows the road, turning ominous on its own
+- Autosave, arrival summary, memorials, achievements, and an account that persists across runs
 
 ## Structure
 

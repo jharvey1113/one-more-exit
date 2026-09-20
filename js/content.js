@@ -1,516 +1,583 @@
 /* One More Exit — game CONTENT.
-   Everything here is data, not logic: routes, vehicles, careers, items and events.
-   It is shaped like the Supabase tables it will eventually live in, so moving it
-   into the database later means changing where it loads from, not how it works. */
+   Data only: the road, the people on it, what you can carry, and what happens.
+   Shaped like the Supabase tables this will eventually live in. */
 window.OME_CONTENT = (() => {
-  // ---------------------------------------------------------------- route
-  // Phoenix -> Flagstaff on I-17. Nodes are stops; the gaps between them are segments.
+  /* ---------------------------------------------------------------- the road
+     Phoenix to Boston, about 2,750 miles. Settlements are checkpoints: reach one
+     and you can always come back to it. Everything between them is road. */
   const route = {
-    id: "i17-phx-flg",
-    name: "Phoenix → Flagstaff",
-    region: "southwest",
+    id: "phx-bos",
+    name: "Phoenix → Boston",
     nodes: [
-      { id: "phoenix", name: "Phoenix", mile: 0, elevation: 1086, kind: "city",
-        services: ["fuel", "food", "shop", "repair", "rest"] },
-      { id: "anthem", name: "Anthem", mile: 30, elevation: 1900, kind: "exit",
-        services: ["fuel", "food"] },
-      { id: "blackcanyon", name: "Black Canyon City", mile: 45, elevation: 2050, kind: "exit",
-        services: ["fuel", "food", "repair"], blurb: "Last cheap gas before the climb." },
-      { id: "sunsetpoint", name: "Sunset Point Rest Area", mile: 64, elevation: 3200, kind: "rest",
-        services: ["rest", "view"], blurb: "Free bathrooms and an enormous view." },
-      { id: "cordes", name: "Cordes Junction", mile: 78, elevation: 3800, kind: "exit",
-        services: ["fuel", "food"], blurb: "Truckers, a diner, and a lot of wind." },
-      { id: "campverde", name: "Camp Verde", mile: 94, elevation: 3150, kind: "town",
-        services: ["fuel", "food", "shop", "repair", "rest"] },
-      { id: "stoneman", name: "Stoneman Lake Road", mile: 116, elevation: 6200, kind: "exit",
-        services: [], blurb: "A road sign, a cattle guard, and nothing else." },
-      { id: "munds", name: "Munds Park", mile: 131, elevation: 6900, kind: "exit",
-        services: ["fuel", "food", "rest"] },
-      { id: "flagstaff", name: "Flagstaff", mile: 146, elevation: 6910, kind: "city",
-        services: ["fuel", "food", "shop", "repair", "rest"], destination: true }
+      // --- the Southwest: hot, empty, and surprisingly organized -------------
+      { id: "phoenix", name: "Phoenix", mile: 0, region: "desert", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 1,
+        blurb: "Water rationed, power on six hours a day, and a functioning market. It works. It just doesn't work well." },
+      { id: "payson", name: "Payson Junction", mile: 94, region: "desert", kind: "stop",
+        services: ["fuel", "food"], fuelChance: 0.75, blurb: "A pump, a generator, and a man who charges for both." },
+      { id: "holbrook", name: "Holbrook", mile: 186, region: "desert", kind: "stop",
+        services: ["fuel", "repair"], fuelChance: 0.6, blurb: "Concrete teepees, still standing, now occupied." },
+      { id: "gallup", name: "Gallup", mile: 288, region: "desert", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.9,
+        blurb: "Trading post. Genuinely a trading post now." },
+      { id: "albuquerque", name: "Albuquerque", mile: 428, region: "mesa", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.9,
+        blurb: "The biggest thing still lit up between here and the Mississippi." },
+      { id: "santarosa", name: "Santa Rosa", mile: 546, region: "mesa", kind: "stop",
+        services: ["fuel", "food"], fuelChance: 0.5, blurb: "A blue hole full of very cold water and nothing else." },
+      // --- the plains: wind, distance, and people who watch the horizon ------
+      { id: "tucumcari", name: "Tucumcari", mile: 620, region: "plains", kind: "stop",
+        services: ["fuel", "rest"], fuelChance: 0.55, blurb: "Two hundred motel rooms. Eleven people." },
+      { id: "amarillo", name: "Amarillo", mile: 734, region: "plains", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.85,
+        blurb: "Cattle, wind turbines, and a militia that mostly directs traffic." },
+      { id: "elk_city", name: "Elk City", mile: 880, region: "plains", kind: "stop",
+        services: ["fuel", "food"], fuelChance: 0.5 },
+      { id: "okc", name: "Oklahoma City", mile: 1002, region: "plains", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.85,
+        blurb: "Runs on wind power and rules. Both are enforced." },
+      { id: "tulsa", name: "Tulsa", mile: 1112, region: "plains", kind: "stop",
+        services: ["fuel", "food", "repair"], fuelChance: 0.7 },
+      { id: "joplin", name: "Joplin", mile: 1226, region: "farm", kind: "stop",
+        services: ["fuel", "food"], fuelChance: 0.55, blurb: "Everything here has been rebuilt at least once." },
+      { id: "springfield_mo", name: "Springfield", mile: 1300, region: "farm", kind: "stop",
+        services: ["fuel", "rest"], fuelChance: 0.6 },
+      { id: "stlouis", name: "St. Louis", mile: 1518, region: "farm", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.85,
+        blurb: "The bridges are the whole story. Two work. One is guarded. One is a rumor." },
+      { id: "effingham", name: "Effingham", mile: 1618, region: "farm", kind: "stop",
+        services: ["fuel", "food"], fuelChance: 0.6 },
+      { id: "indianapolis", name: "Indianapolis", mile: 1760, region: "rust", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.8,
+        blurb: "They kept the speedway. Of course they kept the speedway." },
+      { id: "dayton", name: "Dayton", mile: 1872, region: "rust", kind: "stop",
+        services: ["fuel", "repair"], fuelChance: 0.6 },
+      { id: "columbus", name: "Columbus", mile: 1944, region: "rust", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.8 },
+      { id: "wheeling", name: "Wheeling", mile: 2072, region: "rust", kind: "stop",
+        services: ["fuel", "food"], fuelChance: 0.55, blurb: "The river is clean now. Nobody is sure why." },
+      { id: "pittsburgh", name: "Pittsburgh", mile: 2144, region: "hills", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.8,
+        blurb: "Mills running again, at a fraction, by people who learned from their grandparents." },
+      { id: "breezewood", name: "Breezewood", mile: 2262, region: "hills", kind: "stop",
+        services: ["fuel", "food"], fuelChance: 0.65, blurb: "Still, somehow, entirely made of gas stations." },
+      { id: "harrisburg", name: "Harrisburg", mile: 2370, region: "hills", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.8 },
+      { id: "scranton", name: "Scranton", mile: 2470, region: "northeast", kind: "stop",
+        services: ["fuel", "repair"], fuelChance: 0.6 },
+      { id: "albany", name: "Albany", mile: 2604, region: "northeast", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest", "lot"], fuelChance: 0.75,
+        blurb: "Checkpoint on the Hudson. They write your name in a book." },
+      { id: "springfield_ma", name: "Springfield", mile: 2700, region: "northeast", kind: "stop",
+        services: ["fuel", "food"], fuelChance: 0.6 },
+      { id: "boston", name: "Boston", mile: 2762, region: "northeast", kind: "settlement",
+        services: ["fuel", "food", "shop", "repair", "rest"], fuelChance: 1, destination: true,
+        blurb: "Lights on the harbor. Actual, electric, unrationed lights." }
     ]
   };
 
-  // ---------------------------------------------------------------- vehicles
+  // Region look and feel, used by the art and the music
+  const regions = {
+    desert:    { name: "Sonoran Desert", sky: ["#6fb3d8", "#f0c891"], ground: "#c98f5c", plant: "saguaro", mood: "open" },
+    mesa:      { name: "High Desert",    sky: ["#5a9ccd", "#e8bb92"], ground: "#a8764f", plant: "scrub",   mood: "open" },
+    plains:    { name: "High Plains",    sky: ["#7fb2cc", "#d9d2a8"], ground: "#b9a45f", plant: "pole",    mood: "lonely" },
+    farm:      { name: "Farm Country",   sky: ["#6f9dc0", "#cfd6b0"], ground: "#7f8c4e", plant: "corn",    mood: "lonely" },
+    rust:      { name: "The Rust Belt",  sky: ["#6b7787", "#b9bcb5"], ground: "#5c6152", plant: "stack",   mood: "grim" },
+    hills:     { name: "The Alleghenies",sky: ["#6c8494", "#aebba9"], ground: "#4c5b46", plant: "pine",    mood: "grim" },
+    northeast: { name: "New England",    sky: ["#5d7e9b", "#b7c6c9"], ground: "#41543f", plant: "pine",    mood: "close" }
+  };
+
+  /* ---------------------------------------------------------------- vehicles
+     Fuel is the whole game now, so economy matters more than comfort. */
   const vehicles = [
-    {
-      id: "ranger", name: "2004 Ford Ranger", tag: "Pickup",
-      tankGal: 16.5, mpg: 21, reliability: 0.82, cargo: 14, seats: 3, comfort: 0.5, offroad: 0.7,
-      blurb: "Hand-me-down. Smells faintly of hay. Starts every time so far."
-    },
-    {
-      id: "civic", name: "2009 Honda Civic", tag: "Compact",
-      tankGal: 13.2, mpg: 32, reliability: 0.9, cargo: 8, seats: 4, comfort: 0.55, offroad: 0.2,
-      blurb: "Cheap on gas. One hubcap has been missing since 2016."
-    },
-    {
-      id: "voyager", name: "1998 Plymouth Voyager", tag: "Minivan",
-      tankGal: 20, mpg: 19, reliability: 0.68, cargo: 20, seats: 7, comfort: 0.7, offroad: 0.25,
-      blurb: "Enormous inside. The check-engine light is a permanent resident."
-    }
+    { id: "ranger", name: "2004 Ford Ranger", tag: "Pickup", value: 900,
+      tankGal: 16.5, mpg: 21, reliability: 0.82, cargo: 16, seats: 3, offroad: 0.7,
+      blurb: "Yours. Smells of hay and old sun. Has never once failed to start." },
+    { id: "civic", name: "2009 Honda Civic", tag: "Compact", value: 800,
+      tankGal: 13.2, mpg: 34, reliability: 0.9, cargo: 8, seats: 4, offroad: 0.2,
+      blurb: "Sips fuel. Will not go anywhere that isn't pavement." },
+    { id: "voyager", name: "1998 Plymouth Voyager", tag: "Van", value: 650,
+      tankGal: 20, mpg: 19, reliability: 0.66, cargo: 24, seats: 7, offroad: 0.25,
+      blurb: "You can sleep in it. You will sleep in it." },
+    { id: "suburban", name: "1996 Chevy Suburban", tag: "SUV", value: 1400,
+      tankGal: 42, mpg: 13, reliability: 0.75, cargo: 28, seats: 8, offroad: 0.8,
+      blurb: "Forty-two gallon tank. Thirteen miles per gallon. Both of those matter." },
+    { id: "diesel", name: "1987 Mercedes 300D", tag: "Diesel", value: 1900,
+      tankGal: 21, mpg: 30, reliability: 0.88, cargo: 12, seats: 5, offroad: 0.3,
+      blurb: "Will run on cooking oil, bad diesel, and spite." },
+    { id: "wagon", name: "1989 Volvo 240 Wagon", tag: "Wagon", value: 1100,
+      tankGal: 15.8, mpg: 24, reliability: 0.86, cargo: 20, seats: 5, offroad: 0.35,
+      blurb: "Square, slow, and functionally immortal." },
+    { id: "bronco", name: "1978 Ford Bronco", tag: "Off-road", value: 1600,
+      tankGal: 23, mpg: 12, reliability: 0.7, cargo: 14, seats: 4, offroad: 0.95,
+      blurb: "Goes where the road stopped being a road." },
+    { id: "moto", name: "Kawasaki KLR 650", tag: "Motorcycle", value: 700,
+      tankGal: 6.1, mpg: 48, reliability: 0.8, cargo: 4, seats: 1, offroad: 0.85,
+      blurb: "Cheap to feed, impossible to sleep in, no roof when it hails." }
   ];
 
-  // ---------------------------------------------------------------- careers
   const careers = [
     { id: "mechanic", name: "Mechanic", cash: 320, skills: { mechanical: 3 },
-      perk: "Repairs cost 25% less and roadside fixes are possible." },
+      perk: "Repairs cost far less, and you can fix things on the shoulder." },
     { id: "nurse", name: "Nurse", cash: 420, skills: { firstAid: 3 },
-      perk: "Health problems hurt less and heal faster." },
+      perk: "Injuries hurt less. People let you through checkpoints." },
     { id: "teacher", name: "Teacher", cash: 300, skills: { social: 2, cooking: 1 },
-      perk: "Stress resistance, but only because it is summer." },
-    { id: "trucker", name: "Truck Driver", cash: 380, skills: { navigation: 3 },
-      perk: "You know which exits are lying to you." },
-    { id: "it", name: "IT Worker", cash: 500, skills: { social: 1, navigation: 1 },
-      perk: "Better starting cash. Worse posture." },
-    { id: "retired", name: "Retired", cash: 640, skills: { outdoors: 2, cooking: 2 },
-      perk: "Money and patience. Energy runs out sooner." }
+      perk: "Stress resistance. Unearned, but real." },
+    { id: "trucker", name: "Long-haul driver", cash: 380, skills: { navigation: 3 },
+      perk: "You know which roads lie and which ones are just quiet." },
+    { id: "farmer", name: "Farmer", cash: 340, skills: { outdoors: 2, cooking: 2 },
+      perk: "You can eat and sleep places other people can't." },
+    { id: "scavenger", name: "Scavenger", cash: 500, skills: { mechanical: 1, outdoors: 1, social: 1 },
+      perk: "You find things. Sometimes useful ones." }
   ];
 
-  // ---------------------------------------------------------------- items
   const items = [
-    { id: "spare", name: "Spare tire", price: 95, bulk: 3, use: "Turns a flat into an inconvenience." },
+    { id: "jerry", name: "Jerry can (5 gal)", price: 45, bulk: 3, use: "Fuel you carry is fuel nobody can refuse to sell you." },
+    { id: "spare", name: "Spare tire", price: 95, bulk: 3, use: "Turns a disaster into an inconvenience." },
     { id: "jack", name: "Jack & lug wrench", price: 40, bulk: 2, use: "Required to actually use that spare." },
-    { id: "tools", name: "Tool kit", price: 60, bulk: 2, use: "Roadside repairs, with enough skill." },
-    { id: "jumper", name: "Jumper cables", price: 25, bulk: 1, use: "For you, or for a stranger." },
-    { id: "oil", name: "Quart of motor oil", price: 9, bulk: 1, use: "Engines appreciate it." },
-    { id: "coolant", name: "Jug of coolant", price: 14, bulk: 1, use: "Mandatory on a long climb in July." },
-    { id: "firstaid", name: "First-aid kit", price: 30, bulk: 1, use: "Bandages, aspirin, optimism." },
-    { id: "water", name: "Case of water", price: 7, bulk: 2, use: "Arizona is not a suggestion." },
-    { id: "snacks", name: "Box of snacks", price: 12, bulk: 1, use: "Food that will not betray you." },
-    { id: "jerky", name: "Questionable beef jerky", price: 4, bulk: 1, use: "The date is smudged." },
-    { id: "charger", name: "Phone charger", price: 15, bulk: 1, use: "Keeps the map alive." },
-    { id: "blanket", name: "Blanket", price: 18, bulk: 1, use: "Sleeping in the car is a lifestyle." },
-    { id: "flashlight", name: "Flashlight", price: 12, bulk: 1, use: "For looking at the engine uselessly at night." },
-    { id: "tape", name: "Duct tape", price: 6, bulk: 1, use: "Holds a bumper, a hose, or a plan together." },
-    { id: "mug", name: "Giant souvenir mug", price: 11, bulk: 2, use: "64 ounces. No practical purpose." }
+    { id: "tools", name: "Tool kit", price: 60, bulk: 2, use: "Roadside repairs, given skill and daylight." },
+    { id: "jumper", name: "Jumper cables", price: 25, bulk: 1, use: "For you, or for whoever flags you down." },
+    { id: "oil", name: "Case of motor oil", price: 22, bulk: 1, use: "Old engines drink it." },
+    { id: "coolant", name: "Jug of coolant", price: 14, bulk: 1, use: "The desert does not negotiate." },
+    { id: "firstaid", name: "First-aid kit", price: 30, bulk: 1, use: "Bandages, antibiotics, and luck." },
+    { id: "water", name: "Water (5 gal)", price: 12, bulk: 2, use: "Drink it, or pour it into a radiator." },
+    { id: "food", name: "Box of rations", price: 20, bulk: 2, use: "Three days of food that will not argue with you." },
+    { id: "jerky", name: "Unlabeled jerky", price: 5, bulk: 1, use: "Someone made this. Probably recently." },
+    { id: "radio", name: "Shortwave radio", price: 55, bulk: 1, use: "Hear about the road ahead. And other things." },
+    { id: "battery", name: "Portable battery", price: 48, bulk: 1, use: "Keeps the lights and the radio alive." },
+    { id: "blanket", name: "Wool blankets", price: 24, bulk: 2, use: "Sleeping in the vehicle is standard now." },
+    { id: "tent", name: "Tent", price: 60, bulk: 3, use: "Camp away from the road, away from the road's people." },
+    { id: "flashlight", name: "Flashlight", price: 12, bulk: 1, use: "Dark is darker than it used to be." },
+    { id: "tape", name: "Duct tape", price: 8, bulk: 1, use: "Holds a hose, a bumper, or a plan together." },
+    { id: "siphon", name: "Siphon hose", price: 18, bulk: 1, use: "Abandoned tanks are not always empty." },
+    { id: "medkit2", name: "Antibiotics", price: 70, bulk: 1, use: "Worth more than fuel, by weight." },
+    { id: "mug", name: "Giant souvenir mug", price: 6, bulk: 2, use: "64 ounces. No practical purpose. You want it." }
   ];
 
   /* ---------------------------------------------------------------- events
-     Each event mirrors the planned events table:
-       id, title, text, weight, rarity, cooldown, requires, choices[]
-     A choice has: label, requires, outcomes[] (weighted), each with text + effects.
-     Effects are plain numbers applied to the trip; items add/remove; flags stick to
-     the account; anomaly nudges the hidden story variable. */
+     requires: minMile/maxMile, region, night/daytime, grade, minAnomaly, maxEnergy,
+     items, service, stopped, onFoot, maxFuelPct, maxVehicle, flag, notFlag.
+     Each choice may require items/skills; outcomes are weighted. */
   const events = [
-    {
-      id: "check_engine", title: "CHECK ENGINE", weight: 10, cooldown: 999,
-      requires: { minMile: 12 },
-      text: "The check-engine light comes on with the quiet confidence of something that has been thinking about it for a while.",
+    // ---------------------------------------------------------------- road, general
+    { id: "check_engine", title: "CHECK ENGINE", weight: 9, requires: { minMile: 20 },
+      text: "The light comes on with the quiet confidence of something that has been thinking about it for a while.",
       choices: [
-        { label: "Pull over and look at the engine", outcomes: [
+        { label: "Pull over and look", outcomes: [
           { w: 2, text: "You open the hood and stare. The engine stares back. Nothing is visibly on fire, which you decide counts as good news.", effects: { time: 12, stress: -2 } },
-          { w: 1, text: "A vacuum hose has popped off. You push it back on with your thumb and feel like a genius.", effects: { time: 15, vehicle: 6, stress: -4, skill: { mechanical: 1 } } }
+          { w: 1, text: "A vacuum line has popped off. You push it back on with your thumb and feel like a genius.", effects: { time: 15, vehicle: 6, stress: -4, skill: { mechanical: 1 } } }
         ] },
-        { label: "Find a repair shop", requires: { service: "repair" }, outcomes: [
-          { w: 1, text: "They read the code, clear it, and charge you for the privilege.", effects: { cash: -45, time: 50, vehicle: 4, stress: -6 } }
-        ] },
-        { label: "Keep driving and monitor it", outcomes: [
-          { w: 3, text: "Nothing changes. The light stays on. You get used to it faster than you expected.", effects: { stress: 3, flag: "ignored_light" } },
-          { w: 1, text: "Twenty miles later the engine develops a stumble you can feel through the seat.", effects: { vehicle: -8, stress: 8, flag: "ignored_light" } }
+        { label: "Keep going and monitor it", outcomes: [
+          { w: 3, text: "Nothing changes. You get used to the light faster than you expected.", effects: { stress: 3, flag: "ignored_light" } },
+          { w: 1, text: "Twenty miles later there's a stumble you can feel through the seat.", effects: { vehicle: -8, stress: 8 } }
         ] },
         { label: "Turn the radio up", outcomes: [
-          { w: 1, text: "The check-engine light remains illuminated, but you feel considerably less responsible for it.", effects: { stress: -2, flag: "ignored_light", achievement: "probably_fine" } }
+          { w: 1, text: "The light remains illuminated, but you feel considerably less responsible for it.", effects: { stress: -3, achievement: "probably_fine", flag: "ignored_light" } }
         ] }
-      ]
-    },
-    {
-      id: "construction", title: "CONSTRUCTION AHEAD", weight: 9,
-      text: "Orange barrels, a pilot car, and a sign promising delays. There is no visible construction happening anywhere.",
+      ] },
+
+    { id: "pumps_dry", title: "PUMPS DRY", weight: 8, requires: { service: "fuel", stopped: true },
+      text: "Hand-lettered on cardboard, taped over the pump: NO FUEL. NOT TOMORROW EITHER.",
       choices: [
-        { label: "Wait it out", outcomes: [
-          { w: 1, text: "Twenty-five minutes. A worker waves. You wave back. Neither of you means it unkindly.", effects: { time: 25, stress: 4, fuelGal: -0.2 } }
+        { label: "Ask what it would take", requires: { skillMin: { social: 1 } }, outcomes: [
+          { w: 2, text: "There is fuel. There is always fuel. It costs what he says it costs.", effects: { fuelPrice: 2.4, time: 20, skill: { social: 1 } } },
+          { w: 1, text: "He looks at you for a while and then says no again, more slowly.", effects: { time: 15, stress: 8 } }
         ] },
-        { label: "Take the frontage road", requires: { skillMin: { navigation: 1 } }, outcomes: [
-          { w: 2, text: "You skirt the whole mess and rejoin the highway feeling smug.", effects: { time: 6, miles: 3, skill: { navigation: 1 } } },
-          { w: 1, text: "The frontage road ends in gravel and a locked gate. You backtrack.", effects: { time: 22, miles: 5, vehicle: -3, stress: 6 } }
+        { label: "Trade something for it", requires: { items: ["jerky"] }, outcomes: [
+          { w: 1, text: "Food moves faster than money out here. Two gallons for the jerky, and he throws in the news.", effects: { fuelGal: 2, removeItem: "jerky", time: 18, flag: "traded_food" } }
+        ] },
+        { label: "Move on", outcomes: [
+          { w: 1, text: "You leave with what you came with, which is less than you wanted.", effects: { stress: 6 } }
         ] }
-      ]
-    },
-    {
-      id: "gas_gouge", title: "$5.19 A GALLON", weight: 8,
-      requires: { service: "fuel" },
-      text: "The only gas for thirty miles, and they know it. A hand-lettered sign says NO PUBLIC RESTROOM.",
+      ] },
+
+    { id: "siphon_chance", title: "AN ABANDONED TANKER", weight: 6, requires: { items: ["siphon"], minMile: 120 },
+      text: "It's been on its side in the median long enough for weeds to grow through the cab. The belly tank might still have something in it.",
       choices: [
-        { label: "Fill up anyway", outcomes: [
-          { w: 1, text: "You pay it. The pump is slow, as though savoring this.", effects: { fillRate: 5.19, time: 12, stress: 5 } }
+        { label: "Siphon what you can", outcomes: [
+          { w: 3, text: "Four gallons of something that smells close enough to diesel. Your arms will smell like it for two days.", effects: { fuelGal: 4, time: 40, health: -2, stress: -6 } },
+          { w: 1, text: "Sludge. Whatever was in there separated years ago. You get nothing but a headache.", effects: { time: 35, health: -4, stress: 8 } }
         ] },
-        { label: "Put in just enough to reach the next town", outcomes: [
-          { w: 1, text: "Ten dollars of dignity.", effects: { cash: -10, fuelGal: 1.9, time: 8 } }
-        ] },
-        { label: "Drive on and hope", outcomes: [
-          { w: 1, text: "You leave. The needle continues its slow migration toward E.", effects: { stress: 6, flag: "gambled_fuel" } }
+        { label: "Leave it alone", outcomes: [
+          { w: 1, text: "Someone has been living in the trailer. You see the laundry line too late to pretend you didn't.", effects: { stress: 10, anomaly: 1 } }
         ] }
-      ]
-    },
-    {
-      id: "dust_storm", title: "DUST STORM AHEAD", weight: 6,
-      requires: { maxMile: 80, daytime: true },
-      text: "A brown wall is crossing the interstate about a mile ahead. The sign on the shoulder says PULL ASIDE — STAY ALIVE.",
+      ] },
+
+    { id: "roadblock", title: "THE ROAD IS CLOSED", weight: 7, requires: { minMile: 200 },
+      text: "Two cars nose to nose across both lanes, and three people who are being very polite about it. A toll, they explain. For maintenance.",
       choices: [
-        { label: "Pull completely off, lights off, foot off the brake", outcomes: [
-          { w: 1, text: "You do it exactly the way the sign says. Twelve minutes of sandpaper on the windshield, then daylight.", effects: { time: 14, stress: 6, skill: { navigation: 1 } } }
+        { label: "Pay the toll", outcomes: [
+          { w: 1, text: "Forty dollars, a wave, and the cars roll back exactly enough to let you through.", effects: { cash: -40, time: 15 } }
         ] },
-        { label: "Slow down and keep going", outcomes: [
-          { w: 2, text: "Visibility drops to a hood length. You come out the far side with your hands aching from the wheel.", effects: { time: 8, stress: 16, vehicle: -4, health: -2 } },
-          { w: 1, text: "You emerge fine, but the paint has been very lightly sandblasted.", effects: { time: 6, stress: 10, vehicle: -7 } }
+        { label: "Talk your way through", requires: { skillMin: { social: 2 } }, outcomes: [
+          { w: 2, text: "You mention the last checkpoint by name and the mood changes. Twenty dollars, friend rate.", effects: { cash: -20, time: 20, skill: { social: 1 } } },
+          { w: 1, text: "They are not interested in conversation and the price goes up for wasting daylight.", effects: { cash: -70, time: 30, stress: 12 } }
+        ] },
+        { label: "Take the frontage road around", requires: { skillMin: { navigation: 1 } }, outcomes: [
+          { w: 2, text: "Dirt, a cattle gate, and back on the interstate a mile past them.", effects: { time: 35, fuelBurn: 1.5, vehicle: -3, skill: { navigation: 1 } } },
+          { w: 1, text: "The detour is longer than it looked and the ruts are deeper.", effects: { time: 55, fuelBurn: 2.5, vehicle: -9, stress: 10 } }
+        ] },
+        { label: "Drive at them", outcomes: [
+          { w: 1, text: "They move. Of course they move. You spend the next hour watching the mirror and feeling worse about it than you expected.", effects: { time: 2, stress: 22, vehicle: -4, flag: "ran_blockade" } }
         ] }
-      ]
-    },
-    {
-      id: "overheat", title: "TEMPERATURE CLIMBING", weight: 7,
-      requires: { minMile: 60, grade: "climb" },
-      text: "The temperature needle is drifting past the middle for the first time all day. The grade ahead is six miles of uphill.",
+      ] },
+
+    { id: "convoy", title: "A CONVOY", weight: 6, requires: { minMile: 150 },
+      text: "Six vehicles running close, lights on in daylight. The last one slows and the driver waves you into the line.",
       choices: [
-        { label: "Turn the heater on full blast", outcomes: [
-          { w: 1, text: "The oldest trick there is. It pulls heat off the engine and into your face. You crest the hill sweating and victorious.", effects: { time: 6, health: -2, stress: 4, skill: { mechanical: 1 } } }
+        { label: "Join the convoy for a while", outcomes: [
+          { w: 3, text: "Ninety miles of somebody else watching the mirrors. You'd forgotten what that felt like.", effects: { time: -10, stress: -16, flag: "rode_convoy", skill: { social: 1 } } },
+          { w: 1, text: "They peel off at an exit that isn't on your map, all six, without signaling. You keep going alone.", effects: { stress: 6, anomaly: 1 } }
         ] },
-        { label: "Pull over and let it cool", outcomes: [
-          { w: 1, text: "Twenty minutes in the shade of a rock. You add coolant if you have it.", effects: { time: 22, vehicle: 4, useItem: "coolant" } }
-        ] },
-        { label: "Push through", outcomes: [
-          { w: 2, text: "You make it. Barely. Something under the hood ticks for a while after you shut it off.", effects: { vehicle: -12, stress: 10 } },
-          { w: 1, text: "Steam. Actual steam. You coast onto the shoulder and wait a long time.", effects: { vehicle: -18, time: 45, stress: 18, health: -3 } }
+        { label: "Hang back", outcomes: [
+          { w: 1, text: "You let them get small in the distance. Safer, maybe. Quieter, definitely.", effects: { stress: 4 } }
         ] }
-      ]
-    },
-    {
-      id: "flat_tire", title: "THAT'S NOT A GOOD SOUND", weight: 6,
-      requires: { minMile: 25 },
-      text: "A rhythmic thumping starts, then gets faster, then gets embarrassing. Right rear is flat.",
+      ] },
+
+    { id: "hitchhiker", title: "SOMEONE ON THE SHOULDER", weight: 7, requires: { minMile: 80, daytime: true },
+      text: "A woman with a pack and a sunburn, one hand raised, not quite a wave.",
       choices: [
-        { label: "Change it yourself", requires: { items: ["spare", "jack"] }, outcomes: [
-          { w: 1, text: "Twenty-five minutes and one skinned knuckle later, you are rolling on the little spare.", effects: { time: 28, health: -2, vehicle: -5, removeItem: "spare", skill: { mechanical: 2 }, achievement: "tire_hero" } }
+        { label: "Pick her up", outcomes: [
+          { w: 3, text: "Her name is Mercy. She rides forty miles, fixes your idle by ear, and gets out at a road with no sign.", effects: { time: 20, vehicle: 6, stress: -8, flag: "met_mercy", skill: { mechanical: 1 } } },
+          { w: 1, text: "She's quiet the whole way. Getting out she says, \"Careful east of the river.\" You never told her where you were going.", effects: { time: 20, stress: 8, anomaly: 1, flag: "met_mercy" } }
         ] },
-        { label: "Call for roadside assistance", outcomes: [
-          { w: 1, text: "Ninety minutes of waiting, then a very cheerful man fixes it in nine.", effects: { time: 95, cash: -120, stress: 12 } }
-        ] },
-        { label: "Limp to the next exit on the flat", outcomes: [
-          { w: 1, text: "You make it. The tire does not. The rim is now a topic of conversation.", effects: { time: 18, vehicle: -14, cash: -180, stress: 15 } }
-        ] }
-      ]
-    },
-    {
-      id: "gas_station_sushi", title: "GAS STATION SUSHI", weight: 5,
-      requires: { service: "food" },
-      text: "Beside the roller hot dogs, under a light that has been humming since 2009, is a plastic tray of sushi.",
-      choices: [
-        { label: "Obviously not", outcomes: [
-          { w: 1, text: "You buy a banana instead and feel like an adult.", effects: { cash: -2, food: 1, stress: -2 } }
-        ] },
-        { label: "Obviously yes", outcomes: [
-          { w: 2, text: "It is fine. It is honestly fine. You are almost disappointed.", effects: { cash: -8, food: 2, achievement: "never_again" } },
-          { w: 3, text: "It is not fine. The next forty miles are a negotiation between you and your own body.", effects: { cash: -8, health: -12, stress: 14, achievement: "never_again" } }
-        ] }
-      ]
-    },
-    {
-      id: "speed_trap", title: "A CAR IN THE MEDIAN", weight: 6,
-      requires: { minMile: 20 },
-      text: "White SUV, nose out, tucked behind a stand of brush at the bottom of a long downhill.",
-      choices: [
-        { label: "Brake hard", outcomes: [
-          { w: 2, text: "He doesn't move. The truck behind you is now extremely close and extremely annoyed.", effects: { stress: 8, time: 2 } }
-        ] },
-        { label: "Coast down naturally", outcomes: [
-          { w: 3, text: "Nothing happens. You spend the next four miles checking your mirror anyway.", effects: { stress: 3 } },
-          { w: 1, text: "Lights. A very polite conversation and a very impolite number.", effects: { cash: -186, time: 22, stress: 20, flag: "ticketed" } }
-        ] },
-        { label: "Flash your lights at oncoming traffic afterward", outcomes: [
-          { w: 1, text: "A trucker flashes back. Somewhere, a small act of solidarity is recorded.", effects: { stress: -4, skill: { social: 1 } } }
-        ] }
-      ]
-    },
-    {
-      id: "hitchhiker", title: "SOMEONE ON THE SHOULDER", weight: 5,
-      requires: { minMile: 40, daytime: true },
-      text: "A man with a gas can and a sunburn raises one hand, not quite a wave.",
-      choices: [
-        { label: "Give him a ride to the next exit", outcomes: [
-          { w: 3, text: "His name is Dale. He talks about his brother the entire time and gives you eleven dollars for fuel.", effects: { cash: 11, time: 14, stress: -3, flag: "met_dale", skill: { social: 1 } } },
-          { w: 1, text: "He is quiet the whole way. When he gets out he says, \"Careful up past Stoneman.\" You didn't mention where you were headed.", effects: { time: 14, stress: 6, anomaly: 1, flag: "met_dale" } }
-        ] },
-        { label: "Give him water and keep going", requires: { items: ["water"] }, outcomes: [
-          { w: 1, text: "He takes two bottles, nods, and is already walking before you pull away.", effects: { time: 5, stress: -2, skill: { social: 1 } } }
-        ] },
-        { label: "Keep driving", outcomes: [
-          { w: 1, text: "You watch him get smaller in the mirror and think about it for the next twenty miles.", effects: { stress: 7 } }
-        ] }
-      ]
-    },
-    {
-      id: "elk", title: "ELK", weight: 6,
-      requires: { minMile: 105, night: true },
-      text: "Two eyes at the edge of the headlights, then a shape the size of a refrigerator stepping onto the asphalt.",
-      choices: [
-        { label: "Brake in a straight line", outcomes: [
-          { w: 3, text: "You stop in time. It looks at you with total indifference and walks off into the pines.", effects: { time: 4, stress: 18, vehicle: -2 } },
-          { w: 1, text: "You stop. The elk does not. A hoof puts a dent in your fender on the way past.", effects: { vehicle: -12, stress: 25, time: 10 } }
-        ] },
-        { label: "Swerve", outcomes: [
-          { w: 2, text: "You miss the elk and catch the rumble strip. Your heart takes four miles to come down.", effects: { stress: 26, vehicle: -4, time: 3 } },
-          { w: 2, text: "You miss the elk and clip a sign. The sign loses.", effects: { vehicle: -16, stress: 24, cash: -60, time: 20 } }
-        ] }
-      ]
-    },
-    {
-      id: "free_coffee", title: "FREE REFILL", weight: 5,
-      requires: { service: "food" },
-      text: "The sign says FREE REFILL ON ANY SIZE. The largest size is the dimensions of a paint can.",
-      choices: [
-        { label: "Fill the paint can", outcomes: [
-          { w: 1, text: "You will be awake for six hours and regret two of them.", effects: { cash: -3, energy: 22, stress: 5, health: -1 } }
-        ] },
-        { label: "Normal-sized human coffee", outcomes: [
-          { w: 1, text: "Warm, bitter, adequate.", effects: { cash: -2, energy: 10 } }
-        ] }
-      ]
-    },
-    {
-      id: "rock_chip", title: "GRAVEL TRUCK", weight: 6,
-      text: "A dump truck ahead has a tarp that is more of a gesture than a cover.",
-      choices: [
-        { label: "Back way off", outcomes: [
-          { w: 2, text: "You lose four minutes and keep your windshield.", effects: { time: 5 } }
-        ] },
-        { label: "Pass it", outcomes: [
-          { w: 2, text: "Clean pass, no damage, small thrill.", effects: { stress: 2 } },
-          { w: 2, text: "A rock cracks off the windshield like a gunshot. A star-shaped chip, right at eye level, forever.", effects: { vehicle: -5, stress: 12, flag: "windshield_chip" } }
-        ] }
-      ]
-    },
-    {
-      id: "lost", title: "THIS DOESN'T LOOK RIGHT", weight: 4,
-      requires: { minMile: 30 },
-      text: "You took an exit for fuel and now you are on a road with no stripe, going a direction you did not choose.",
-      choices: [
-        { label: "Double back", outcomes: [
-          { w: 1, text: "Eight miles of embarrassment, then the interstate again.", effects: { miles: 8, time: 18, fuelGal: -0.4, stress: 8, achievement: "shortcut" } }
-        ] },
-        { label: "Keep going, it probably loops around", outcomes: [
-          { w: 2, text: "It does loop around, eventually, past a house with eleven mailboxes.", effects: { miles: 12, time: 26, fuelGal: -0.6, stress: 5, skill: { navigation: 1 }, achievement: "shortcut" } },
-          { w: 1, text: "It does not loop around. It ends at a cattle gate. A cow watches you turn around.", effects: { miles: 16, time: 34, vehicle: -4, stress: 14, achievement: "shortcut" } }
-        ] }
-      ]
-    },
-    {
-      id: "attraction_fork", title: "WORLD'S LARGEST FORK", weight: 5,
-      requires: { daytime: true, minMile: 35 },
-      text: "A billboard advertises it for eleven miles. The exit is right here. It is, allegedly, thirty-one feet tall.",
-      choices: [
-        { label: "Stop and look at the fork", outcomes: [
-          { w: 1, text: "It is nineteen feet tall at most. You take a photo anyway. It is, undeniably, a very large fork.", effects: { time: 22, stress: -10, souvenir: "Photo of a medium-large fork", achievement: "tourist" } }
-        ] },
-        { label: "Buy the gift shop mug", outcomes: [
-          { w: 1, text: "Sixty-four ounces of commemorative ceramic. It will live in a cupboard for a decade.", effects: { time: 26, cash: -11, stress: -12, addItem: "mug", souvenir: "Giant fork mug", achievement: "tourist" } }
+        { label: "Give water and keep going", requires: { items: ["water"] }, outcomes: [
+          { w: 1, text: "She takes it, nods, and is walking again before you've pulled away.", effects: { time: 6, stress: -3, skill: { social: 1 } } }
         ] },
         { label: "Drive past", outcomes: [
-          { w: 1, text: "You drive past. You will think about the fork again in four years.", effects: { stress: 2 } }
+          { w: 1, text: "You watch her get smaller in the mirror and think about it for the next twenty miles.", effects: { stress: 9 } }
         ] }
-      ]
-    },
-    {
-      id: "vending", title: "ROW E", weight: 4,
-      requires: { service: "food" },
-      text: "The chips are stuck. They are clearly stuck. They have committed to being stuck.",
+      ] },
+
+    { id: "dust_storm", title: "DUST STORM", weight: 6, requires: { region: "desert", daytime: true },
+      text: "A brown wall is crossing the interstate a mile ahead. The old sign still says PULL ASIDE — STAY ALIVE, and somebody has kept it painted.",
       choices: [
-        { label: "Buy a second bag to knock the first one down", outcomes: [
-          { w: 2, text: "Both bags fall. You have doubled your investment and your sodium.", effects: { cash: -3, food: 2, stress: -4 } },
-          { w: 1, text: "The second bag also hangs there. You now own two bags of chips located inside a machine.", effects: { cash: -3, stress: 10 } }
+        { label: "Pull off, lights off, foot off the brake", outcomes: [
+          { w: 1, text: "Twelve minutes of sandpaper on glass, then daylight and a world the color of a paper bag.", effects: { time: 16, stress: 6, skill: { navigation: 1 } } }
         ] },
-        { label: "The shake", outcomes: [
-          { w: 1, text: "A stranger watches you shake a vending machine. The chips fall. Eye contact is not made.", effects: { food: 1, stress: -2, energy: -2 } }
-        ] },
-        { label: "Walk away", outcomes: [
-          { w: 1, text: "You walk away. This is the mature option and it tastes like nothing.", effects: { stress: 3 } }
+        { label: "Push through slowly", outcomes: [
+          { w: 2, text: "Visibility drops to a hood length. You come out the far side with aching hands.", effects: { time: 9, stress: 16, vehicle: -5, health: -2 } },
+          { w: 1, text: "Something big passes going the other way, close enough to rock you. Neither of you saw the other.", effects: { time: 8, stress: 26, vehicle: -8 } }
         ] }
-      ]
-    },
-    {
-      id: "battery", title: "CLICK. CLICK. CLICK.", weight: 5,
-      requires: { stopped: true, minMile: 40 },
-      text: "You turn the key and the truck makes the specific sound of a battery that has decided this is where it lives now.",
+      ] },
+
+    { id: "overheat", title: "TEMPERATURE CLIMBING", weight: 7, requires: { grade: "climb", minMile: 60 },
+      text: "The needle drifts past the middle for the first time today, and the grade ahead goes up for six miles.",
       choices: [
-        { label: "Ask someone for a jump", requires: { items: ["jumper"] }, outcomes: [
-          { w: 1, text: "A woman in a Tacoma has you running in four minutes and refuses money.", effects: { time: 14, vehicle: 2, stress: -4, skill: { social: 1 } } }
+        { label: "Heater on full blast", outcomes: [
+          { w: 1, text: "The oldest trick there is. You crest the hill sweating and victorious.", effects: { time: 8, health: -2, stress: 4, skill: { mechanical: 1 } } }
         ] },
-        { label: "Ask around without cables", outcomes: [
-          { w: 2, text: "A trucker has cables and a lecture about terminal corrosion. Both help.", effects: { time: 26, stress: 6, skill: { mechanical: 1 } } },
-          { w: 1, text: "Nobody has cables. You buy a set at an alarming markup.", effects: { time: 35, cash: -48, addItem: "jumper", stress: 12 } }
+        { label: "Pull over and let it cool", outcomes: [
+          { w: 1, text: "Twenty minutes in what shade there is. You top off the coolant if you have it.", effects: { time: 24, vehicle: 4, useItem: "coolant" } }
         ] },
-        { label: "Push start it", requires: { skillMin: { mechanical: 2 } }, outcomes: [
-          { w: 1, text: "You and two strangers push. It catches on the second try. Everyone cheers.", effects: { time: 12, energy: -8, stress: -6, skill: { mechanical: 1 } } }
+        { label: "Push on", outcomes: [
+          { w: 2, text: "You make it. Something under the hood ticks for a long time after you shut it off.", effects: { vehicle: -12, stress: 10 } },
+          { w: 1, text: "Steam, then the smell, then the shoulder. You wait a long time for it to be touchable.", effects: { vehicle: -20, time: 55, stress: 20, health: -3 } }
         ] }
-      ]
-    },
-    {
-      id: "phone_dying", title: "10% BATTERY", weight: 5,
-      requires: { minMile: 30 },
-      text: "Your phone is at ten percent and your map is the only thing on it that matters.",
+      ] },
+
+    { id: "flat_tire", title: "THAT'S NOT A GOOD SOUND", weight: 7, requires: { minMile: 40 },
+      text: "A rhythmic thumping starts, gets faster, then gets embarrassing.",
       choices: [
-        { label: "Plug it in", requires: { items: ["charger"] }, outcomes: [
-          { w: 1, text: "Crisis resolved by forethought. Rare and satisfying.", effects: { stress: -4 } }
+        { label: "Change it yourself", requires: { items: ["spare", "jack"] }, outcomes: [
+          { w: 1, text: "Twenty-five minutes and one skinned knuckle. You're rolling on the spare and watching for the next tire pile.", effects: { time: 30, health: -2, removeItem: "spare", skill: { mechanical: 2 }, achievement: "tire_hero" } }
         ] },
-        { label: "Turn everything off and ration it", outcomes: [
-          { w: 1, text: "Airplane mode, screen dim, map memorized at every exit. It works, mostly.", effects: { stress: 8, skill: { navigation: 1 } } }
+        { label: "Flag someone down", outcomes: [
+          { w: 2, text: "A farm truck stops. He has a tire that nearly fits and won't take money, only the story of where you're going.", effects: { time: 70, vehicle: -4, stress: 8, skill: { social: 1 } } },
+          { w: 1, text: "Nobody stops for two hours. Then somebody does, and charges you for it.", effects: { time: 150, cash: -120, stress: 20 } }
         ] },
-        { label: "Use it normally and accept fate", outcomes: [
-          { w: 1, text: "It dies outside Cordes Junction. You drive by signs, like an ancient person.", effects: { stress: 14, flag: "phone_dead" } }
+        { label: "Limp to the next exit", outcomes: [
+          { w: 1, text: "You make it. The tire does not. The rim is now a conversation topic.", effects: { time: 25, vehicle: -15, stress: 14 } }
         ] }
-      ]
-    },
-    {
-      id: "ten_mil", title: "THE 10MM", weight: 4,
-      requires: { items: ["tools"] },
-      text: "You open the tool kit for something unrelated and notice the 10mm socket is missing. You have never lost one before. You have lost eleven before.",
+      ] },
+
+    { id: "low_fuel_gamble", title: "THE NEEDLE", weight: 9, requires: { maxFuelPct: 18 },
+      text: "Below the E mark now. The next place anyone mentioned is further than you'd like.",
       choices: [
-        { label: "Search the truck", outcomes: [
-          { w: 2, text: "It is not in the truck. It has left this plane of existence.", effects: { time: 8, stress: 6, achievement: "ten_mil" } },
-          { w: 1, text: "It is under the seat, with a french fry from a previous administration.", effects: { time: 10, stress: -4, achievement: "found_it" } }
+        { label: "Pour in the jerry can", requires: { items: ["jerry"] }, outcomes: [
+          { w: 1, text: "Five gallons, funneled carefully, not one drop wasted. The best money you ever spent.", effects: { fuelGal: 5, removeItem: "jerry", time: 12, stress: -14 } }
         ] },
-        { label: "Accept it", outcomes: [
-          { w: 1, text: "You accept it. Somewhere, a 10mm socket is having a wonderful time without you.", effects: { stress: 2, achievement: "ten_mil" } }
+        { label: "Coast the downhills, 45 the rest", outcomes: [
+          { w: 2, text: "You drive like an old man and it works. Fumes and prayer get you there.", effects: { time: 40, fuelSave: 0.8, stress: 12, skill: { navigation: 1 } } },
+          { w: 1, text: "It doesn't work. The engine surges, stumbles, and quits in the silence of a place with no lights.", effects: { fuelGal: -99, stress: 26 } }
+        ] },
+        { label: "Knock on a door", outcomes: [
+          { w: 2, text: "A farmhouse with a tank on stilts out back. He sells you six gallons at a price that is not friendly, but is fair.", effects: { cash: -90, fuelGal: 6, time: 50 } },
+          { w: 1, text: "Nobody answers. The dog at the fence is very clear about the situation.", effects: { time: 30, stress: 14 } }
         ] }
-      ]
-    },
-    {
-      id: "scenic", title: "SCENIC VIEWPOINT", weight: 5,
-      requires: { minMile: 55, daytime: true },
-      text: "The pullout looks over about ninety miles of country you just drove through.",
+      ] },
+
+    { id: "night_lights", title: "LIGHTS BEHIND YOU", weight: 6, requires: { night: true, minMile: 180 },
+      text: "Headlights have been holding the same distance back for eleven miles. Not closing. Not falling away.",
       choices: [
-        { label: "Stop for ten minutes", outcomes: [
-          { w: 1, text: "You stand at the rail and do not check your phone once.", effects: { time: 12, stress: -14, energy: 5, souvenir: "Sunset Point, 3,200 ft" } }
+        { label: "Slow down and let them pass", outcomes: [
+          { w: 2, text: "They pass. A family, three kids asleep in back, hand out the window as they go by.", effects: { stress: -6, time: 4 } },
+          { w: 1, text: "They slow down too. You drive that way for another twenty minutes before they take an exit.", effects: { stress: 20, time: 6, anomaly: 1 } }
         ] },
-        { label: "Keep the momentum", outcomes: [
-          { w: 1, text: "Miles are miles.", effects: { stress: 2 } }
+        { label: "Take the next exit and wait", outcomes: [
+          { w: 1, text: "You sit behind a dead motel with your lights off. Nothing follows. You feel foolish, then relieved, then tired.", effects: { time: 35, energy: -6, stress: 6 } }
+        ] },
+        { label: "Speed up", outcomes: [
+          { w: 1, text: "You open it up. They don't follow. The fuel gauge notices.", effects: { fuelBurn: 1.2, stress: 10, vehicle: -3 } }
         ] }
-      ]
-    },
-    {
-      id: "semi_merge", title: "MERGING SEMI", weight: 6,
-      text: "A loaded semi is coming up the on-ramp at a speed that suggests optimism.",
+      ] },
+
+    { id: "elk", title: "SOMETHING IN THE ROAD", weight: 6, requires: { night: true, minMile: 90 },
+      text: "Eyes at the edge of the headlights, then a shape the size of a refrigerator stepping onto the asphalt.",
       choices: [
-        { label: "Move over", outcomes: [
-          { w: 1, text: "You move left. He flashes his trailer lights in thanks. Small good moment.", effects: { stress: -3, skill: { social: 1 } } }
+        { label: "Brake in a straight line", outcomes: [
+          { w: 3, text: "You stop in time. It looks at you with total indifference and walks off.", effects: { time: 5, stress: 18 } },
+          { w: 1, text: "You stop. It doesn't. A hoof dents the fender on the way past.", effects: { vehicle: -12, stress: 25, time: 12 } }
         ] },
-        { label: "Hold your lane", outcomes: [
-          { w: 2, text: "He backs off. Nobody dies. Everyone is a little tense.", effects: { stress: 7 } }
+        { label: "Swerve", outcomes: [
+          { w: 2, text: "You miss it and catch the rumble strip. Your heart takes four miles to come down.", effects: { stress: 26, vehicle: -4 } },
+          { w: 2, text: "You miss it and clip a sign. The sign loses. So does your headlight.", effects: { vehicle: -18, stress: 24, time: 25 } }
         ] }
-      ]
-    },
-    {
-      id: "nap", title: "YOUR EYES ARE DOING THAT THING", weight: 7,
-      requires: { maxEnergy: 35 },
-      text: "You have read the same mile marker twice and you are not sure you read it either time.",
+      ] },
+
+    { id: "hail", title: "HAIL", weight: 5, requires: { region: "plains" },
+      text: "The sky turns the color of a bruise and the first stone hits the hood like a thrown rock.",
       choices: [
-        { label: "Twenty-minute rest-area nap", outcomes: [
-          { w: 1, text: "You sleep hard for nineteen minutes and wake up like a new model of yourself.", effects: { time: 26, energy: 34, stress: -8, achievement: "luxury" } }
+        { label: "Get under an overpass", outcomes: [
+          { w: 2, text: "Four other vehicles have the same idea. Nobody talks. Everybody nods.", effects: { time: 35, stress: 8 } }
         ] },
-        { label: "Caffeine and sheer will", outcomes: [
-          { w: 1, text: "It works for about forty minutes.", effects: { cash: -4, energy: 14, health: -2, stress: 5 } }
+        { label: "Drive out of it", outcomes: [
+          { w: 2, text: "Eleven miles of noise, then sun. The hood looks like a golf ball.", effects: { vehicle: -10, stress: 18, time: 12 } }
+        ] }
+      ] },
+
+    { id: "bridge_out", title: "THE BRIDGE", weight: 5, requires: { minMile: 1400, maxMile: 1700 },
+      text: "The river is wide and brown and the bridge on your map has a barge tied across the gap in the middle of it.",
+      choices: [
+        { label: "Pay the barge", outcomes: [
+          { w: 1, text: "Sixty dollars and an hour of standing on steel watching the water. Your vehicle looks small out there.", effects: { cash: -60, time: 70, stress: -4, flag: "crossed_barge" } }
+        ] },
+        { label: "Drive south to the working bridge", outcomes: [
+          { w: 1, text: "Fifty extra miles and a checkpoint, but concrete the whole way across.", effects: { time: 70, fuelBurn: 2.2, cash: -10 } }
+        ] },
+        { label: "Ask about the other bridge", requires: { skillMin: { social: 2 } }, outcomes: [
+          { w: 2, text: "There is a third bridge. It is not on any map and the people who use it would like it kept that way.", effects: { time: 45, flag: "third_bridge", anomaly: 1, skill: { social: 1 } } },
+          { w: 1, text: "Nobody here will discuss a third bridge with you, and the way they don't discuss it is itself informative.", effects: { time: 20, stress: 10, anomaly: 1 } }
+        ] }
+      ] },
+
+    { id: "radio_news", title: "THE SHORTWAVE", weight: 6, requires: { items: ["radio"], minMile: 100 },
+      text: "You run the dial while you drive. Mostly static, then a woman reading fuel prices by city, slow and clear, the way you'd read to a child.",
+      choices: [
+        { label: "Write down the prices", outcomes: [
+          { w: 1, text: "Three towns ahead are worth stopping in. Two aren't. That's real money.", effects: { flag: "fuel_intel", stress: -6, skill: { navigation: 1 } } }
+        ] },
+        { label: "Keep listening past the prices", outcomes: [
+          { w: 2, text: "Weather, a missing persons list, a birthday. Ordinary and enormously comforting.", effects: { stress: -10 } },
+          { w: 1, text: "After the list she reads exit numbers. Yours is one of them. She reads it twice.", effects: { stress: 12, anomaly: 2, flag: "heard_414" } }
+        ] }
+      ] },
+
+    { id: "jerky_time", title: "THE JERKY", weight: 5, requires: { items: ["jerky"] },
+      text: "You're hungry and the unlabeled jerky is right there, being unlabeled.",
+      choices: [
+        { label: "Eat it", outcomes: [
+          { w: 2, text: "Salty, chewy, deeply satisfying, no consequences whatsoever.", effects: { food: 1, removeItem: "jerky", stress: -6 } },
+          { w: 1, text: "Consequences. Immediate, thorough, and roadside.", effects: { health: -12, stress: 12, removeItem: "jerky", achievement: "never_again" } }
+        ] },
+        { label: "Save it for trading", outcomes: [
+          { w: 1, text: "It goes back in the bag. Out here, food is currency that never inflates.", effects: {} }
+        ] }
+      ] },
+
+    { id: "nap", title: "YOUR EYES ARE DOING THAT THING", weight: 8, requires: { maxEnergy: 30 },
+      text: "You've read the same mile marker twice and you aren't sure you read it either time.",
+      choices: [
+        { label: "Sleep in the vehicle", outcomes: [
+          { w: 1, text: "Four hours, doors locked, seat back, boots on. You wake up cold and much better.", effects: { time: 240, energy: 60, stress: -12, health: 2, achievement: "luxury" } }
+        ] },
+        { label: "Twenty minutes and coffee", outcomes: [
+          { w: 1, text: "It works for about forty miles.", effects: { time: 30, energy: 22, health: -1 } }
         ] },
         { label: "Keep driving", outcomes: [
-          { w: 2, text: "You keep driving. The lane lines start suggesting things.", effects: { energy: -8, health: -4, stress: 12, vehicle: -2 } }
+          { w: 2, text: "You keep driving. The lane lines start suggesting things.", effects: { energy: -10, health: -5, stress: 14, vehicle: -3 } }
         ] }
-      ]
-    },
-    {
-      id: "jerky_time", title: "THE JERKY", weight: 4,
-      requires: { items: ["jerky"] },
-      text: "You are hungry, and the questionable beef jerky is right there, being questionable.",
-      choices: [
-        { label: "Eat the jerky", outcomes: [
-          { w: 2, text: "Salty, chewy, deeply satisfying. No consequences whatsoever.", effects: { food: 2, removeItem: "jerky", stress: -5 } },
-          { w: 1, text: "Consequences. Immediate and thorough consequences.", effects: { health: -10, stress: 12, removeItem: "jerky" } }
-        ] },
-        { label: "Not yet", outcomes: [
-          { w: 1, text: "You put it back in the bag. It waits.", effects: {} }
-        ] }
-      ]
-    },
-    {
-      id: "hot_shoes", title: "BRAKE SMELL", weight: 5,
-      requires: { minMile: 100, grade: "descend" },
-      text: "Coming down out of the curves there is a hot metallic smell and the pedal feels softer than it did this morning.",
-      choices: [
-        { label: "Downshift and let them cool", outcomes: [
-          { w: 1, text: "Engine braking, slower speed, and the smell fades. Your father would be proud.", effects: { time: 10, skill: { mechanical: 1 }, stress: -2 } }
-        ] },
-        { label: "Ride them the rest of the way down", outcomes: [
-          { w: 2, text: "You get to the bottom. The brakes are now a maintenance item rather than a feature.", effects: { vehicle: -12, stress: 12 } }
-        ] }
-      ]
-    },
-    {
-      id: "snow_flurry", title: "FLURRIES AT 6,000 FEET", weight: 5,
-      requires: { minMile: 110, season: "winter" },
-      text: "It was 74 degrees in Phoenix. Here, small determined snowflakes are crossing your headlights sideways.",
-      choices: [
-        { label: "Slow way down", outcomes: [
-          { w: 1, text: "Forty miles an hour, hazards on, both hands. It takes longer and you arrive alive.", effects: { time: 22, stress: 10, energy: -6 } }
-        ] },
-        { label: "Normal speed, it's barely sticking", outcomes: [
-          { w: 2, text: "It is barely sticking. You are fine.", effects: { stress: 6 } },
-          { w: 1, text: "It is sticking more than advertised. A slow, sideways moment near the guardrail rearranges your priorities.", effects: { vehicle: -10, stress: 30, health: -3, time: 15 } }
-        ] }
-      ]
-    },
+      ] },
 
-    /* ------- quiet groundwork: these only become eligible as anomaly rises ------- */
-    {
-      id: "radio_static", title: "THE RADIO", weight: 3, rarity: "uncommon",
-      requires: { minAnomaly: 0, minMile: 70 },
-      text: "The station you have been listening to drops into static, and under the static there is a man calmly reading exit numbers. Yours is one of them. He reads it twice.",
+    { id: "storm_farm", title: "STORM OVER THE FIELDS", weight: 5, requires: { region: "farm" },
+      text: "You can see the whole weather system at once out here. It is beautiful and it is coming across the road.",
       choices: [
-        { label: "Change the station", outcomes: [
-          { w: 1, text: "Country music. Normal. Loud. Fine.", effects: { stress: 6, anomaly: 1 } }
+        { label: "Find a farm road and wait", outcomes: [
+          { w: 1, text: "Rain so loud you can't hear the engine. Forty minutes later the light goes gold and everything smells like dirt.", effects: { time: 45, stress: -14, souvenir: "A sky the size of the world" } }
         ] },
-        { label: "Listen", outcomes: [
-          { w: 1, text: "He reaches 414 and stops. There is no Exit 414 on this highway. The station comes back mid-song.", effects: { stress: 12, anomaly: 2, flag: "heard_414" } }
+        { label: "Drive through it", outcomes: [
+          { w: 2, text: "White knuckles and hazard lights, and then it's behind you.", effects: { time: 20, stress: 14, vehicle: -3 } }
         ] }
-      ]
-    },
-    {
-      id: "billboard_twice", title: "HAVEN'T YOU SEEN THAT?", weight: 3, rarity: "uncommon",
-      requires: { minAnomaly: 2, minMile: 50 },
-      text: "A billboard for a steakhouse with a cartoon cow. You are fairly sure you passed this exact billboard eleven miles ago, including the bird sitting on it.",
+      ] },
+
+    { id: "mill_town", title: "THE MILL IS RUNNING", weight: 5, requires: { region: "rust" },
+      text: "Smoke from a stack that hasn't smoked in thirty years, and a line of people walking in carrying lunch pails.",
+      choices: [
+        { label: "Stop and look", outcomes: [
+          { w: 1, text: "They restarted one furnace. One. A man explains the whole thing to you with enormous pride and you buy a sandwich you don't need.", effects: { time: 35, cash: -6, stress: -14, souvenir: "Slag glass from a working mill", skill: { social: 1 } } }
+        ] },
+        { label: "Keep moving", outcomes: [
+          { w: 1, text: "You watch it in the mirror for a long time.", effects: { stress: -4 } }
+        ] }
+      ] },
+
+    { id: "toll_appalachia", title: "THE TUNNEL", weight: 5, requires: { region: "hills" },
+      text: "The tunnel through the ridge is lit, staffed, and charging. The alternative is the old road over the top.",
+      choices: [
+        { label: "Pay and take the tunnel", outcomes: [
+          { w: 1, text: "Thirty dollars for four minutes of orange light and the hum of your own tires.", effects: { cash: -30, time: 10 } }
+        ] },
+        { label: "Take the old road over the ridge", outcomes: [
+          { w: 2, text: "Switchbacks, brakes smelling hot, and a view you'd have paid thirty dollars for.", effects: { time: 55, fuelBurn: 1.4, vehicle: -6, stress: -6, souvenir: "The whole valley from the top" } },
+          { w: 1, text: "Halfway up you meet a truck coming down in the middle. The backing-up situation takes an hour.", effects: { time: 80, vehicle: -8, stress: 18 } }
+        ] }
+      ] },
+
+    { id: "checkpoint_ne", title: "THEY WRITE YOUR NAME IN A BOOK", weight: 6, requires: { region: "northeast" },
+      text: "A real checkpoint: a table, a ledger, two people with clipboards and one with a rifle who looks embarrassed about it.",
+      choices: [
+        { label: "Give your name and your business", outcomes: [
+          { w: 3, text: "Fifteen minutes of paperwork and a stamped card you're told to keep.", effects: { time: 20, flag: "carded" } },
+          { w: 1, text: "The clerk finds your name already in the ledger, from four months ago, in handwriting that is almost yours.", effects: { time: 25, stress: 18, anomaly: 3, flag: "the_ledger" } }
+        ] },
+        { label: "Offer to help instead", requires: { skillMin: { firstAid: 2 } }, outcomes: [
+          { w: 1, text: "You look at a woman's infected hand for ten minutes. They wave you through and give you a bag of apples.", effects: { time: 40, addItem: "food", stress: -10, skill: { firstAid: 1 } } }
+        ] }
+      ] },
+
+    // ---------------------------------------------------------------- on foot
+    { id: "foot_walk", title: "WALKING", weight: 9, requires: { onFoot: true },
+      text: "Three miles an hour. Everything you own is on your back and the horizon is not getting closer in any way you can measure.",
+      choices: [
+        { label: "Keep walking", outcomes: [
+          { w: 2, text: "You walk. It is the oldest thing people do.", effects: { time: 30, energy: -8, health: -2 } },
+          { w: 1, text: "A truck slows, looks at you, and keeps going. Then another one stops.", effects: { time: 20, stress: -10, flag: "got_lift", milesFree: 22 } }
+        ] },
+        { label: "Rest in the shade", outcomes: [
+          { w: 1, text: "An hour under an overpass with your boots off. It helps more than it should.", effects: { time: 60, energy: 14, stress: -8 } }
+        ] }
+      ] },
+
+    { id: "foot_find", title: "SOMETHING IN THE WEEDS", weight: 6, requires: { onFoot: true },
+      text: "A sedan nose-down in the ditch, doors open, tires flat but the body straight.",
+      choices: [
+        { label: "Look it over", requires: { skillMin: { mechanical: 1 } }, outcomes: [
+          { w: 2, text: "It turns over. It actually turns over. Half a tank, bald tires, and a smell you will get used to.", effects: { giveVehicle: "civic", vehicleCond: 42, fuelGal: 5, time: 90, stress: -25, achievement: "back_on_wheels" } },
+          { w: 2, text: "Dead as a stone, but the trunk has a jack and a jug of coolant in it.", effects: { addItem: "jack", addItem2: "coolant", time: 45 } }
+        ] },
+        { label: "Take what you can carry", outcomes: [
+          { w: 1, text: "A flashlight, half a roll of tape, and a photograph of people you will never meet.", effects: { addItem: "flashlight", addItem2: "tape", time: 25, souvenir: "A photograph of strangers" } }
+        ] }
+      ] },
+
+    // ---------------------------------------------------------------- settlements
+    { id: "market_rumor", title: "IN THE MARKET", weight: 7, requires: { stopped: true, service: "shop" },
+      text: "Two women arguing about the road east, loudly enough that it's clearly meant to be overheard.",
+      choices: [
+        { label: "Listen", outcomes: [
+          { w: 2, text: "Fuel is short three towns ahead and there's a family selling eggs at the old weigh station. Both facts are useful.", effects: { flag: "fuel_intel", stress: -4 } },
+          { w: 1, text: "They stop when they notice you and start again when you move away.", effects: { stress: 5, anomaly: 1 } }
+        ] },
+        { label: "Join in", requires: { skillMin: { social: 1 } }, outcomes: [
+          { w: 1, text: "You mention where you're headed. One of them says \"Boston\" like it's a rumor she's heard and doesn't believe.", effects: { time: 25, stress: -8, skill: { social: 1 } } }
+        ] }
+      ] },
+
+    { id: "mechanic_offer", title: "THE MECHANIC", weight: 6, requires: { stopped: true, service: "repair", maxVehicle: 65 },
+      text: "She walks around your vehicle once, crouches at the rear wheel, and stands up with a verdict.",
+      choices: [
+        { label: "Have her do the work", outcomes: [
+          { w: 1, text: "Four hours and most of your cash. It runs like a different vehicle.", effects: { repairFull: true, time: 240 } }
+        ] },
+        { label: "Have her teach you instead", requires: { items: ["tools"] }, outcomes: [
+          { w: 1, text: "Half the price, twice the time, and you'll know how to do it next time. That's the real trade.", effects: { repairHalf: true, time: 300, cash: -40, skill: { mechanical: 3 } } }
+        ] },
+        { label: "Not today", outcomes: [{ w: 1, text: "She shrugs. \"It'll tell you when it's serious.\"", effects: {} } ] }
+      ] },
+
+    { id: "kid_with_map", title: "A KID WITH A MAP", weight: 5, requires: { stopped: true },
+      text: "Maybe twelve, selling hand-drawn maps of the next two hundred miles for five dollars. The lettering is careful.",
+      choices: [
+        { label: "Buy a map", outcomes: [
+          { w: 2, text: "It's good. Genuinely good. Water sources, two blocked exits, a note that says DOGS at mile 40.", effects: { cash: -5, flag: "kid_map", skill: { navigation: 2 }, stress: -6 } },
+          { w: 1, text: "It's beautiful and completely wrong, and you won't find that out for a hundred miles.", effects: { cash: -5, flag: "bad_map" } }
+        ] },
+        { label: "Buy two", outcomes: [
+          { w: 1, text: "She looks at you like you've made a mistake, then decides not to mention it. The second map shows a road the first one doesn't.", effects: { cash: -10, skill: { navigation: 1 }, anomaly: 1, souvenir: "A hand-drawn map with an extra road" } }
+        ] }
+      ] },
+
+    { id: "motel_running", title: "A MOTEL WITH THE SIGN LIT", weight: 6, requires: { stopped: true, service: "rest" },
+      text: "Nine rooms, a working ice machine, and a man behind the desk who seems delighted that anyone came.",
+      choices: [
+        { label: "Take a room", outcomes: [
+          { w: 1, text: "Hot water. Actual hot water. You stand in it until it runs cold and then you sleep for nine hours.", effects: { cash: -55, time: 540, energy: 100, health: 12, stress: -30 } }
+        ] },
+        { label: "Sleep in the lot instead", outcomes: [
+          { w: 1, text: "He waves you to a spot under the light and brings you coffee in the morning without being asked.", effects: { time: 420, energy: 70, stress: -14, health: 2 } }
+        ] }
+      ] },
+
+    { id: "vehicle_lot", title: "THE LOT", weight: 6, requires: { stopped: true, service: "lot" },
+      text: "Fifteen vehicles behind a fence, a woman with a clipboard, and a sign: WE TRADE. WE DON'T HAGGLE. (She haggles.)",
+      choices: [
+        { label: "Look at what's there", outcomes: [
+          { w: 1, text: "Open the gate and walk the rows.", effects: { openLot: true } }
+        ] },
+        { label: "Not today", outcomes: [{ w: 1, text: "You keep what you came with. It's gotten you this far.", effects: {} }] }
+      ] },
+
+    // ---------------------------------------------------------------- the quiet ones
+    { id: "billboard_twice", title: "HAVEN'T YOU SEEN THAT?", weight: 3, rarity: "uncommon",
+      requires: { minAnomaly: 2, minMile: 300 },
+      text: "A billboard for a steakhouse with a cartoon cow. You passed this exact billboard eleven miles ago, including the bird sitting on it.",
       choices: [
         { label: "Check the mile markers", outcomes: [
-          { w: 1, text: "The markers are climbing normally. Everything is in order except that you know what you saw.", effects: { stress: 8, anomaly: 1 } }
+          { w: 1, text: "The markers climb normally. Everything is in order except that you know what you saw.", effects: { stress: 8, anomaly: 1 } }
         ] },
-        { label: "Take a photo of it", outcomes: [
-          { w: 1, text: "You take a photo. Later, the photo shows the billboard, the sky, and no bird.", effects: { stress: 10, anomaly: 2, souvenir: "Photo of a billboard" } }
+        { label: "Photograph it", outcomes: [
+          { w: 1, text: "Later, the photo shows the billboard, the sky, and no bird.", effects: { stress: 10, anomaly: 2, souvenir: "Photo of a billboard, no bird" } }
         ] }
-      ]
-    },
-    {
-      id: "back_again", title: "BACK AGAIN?", weight: 2, rarity: "rare",
-      requires: { minAnomaly: 4, service: "fuel" },
-      text: "The attendant rings up your gas, looks at you for slightly too long, and says, \"Back again? You made better time last go-round.\"\n\nYou have never been here before.",
+      ] },
+
+    { id: "back_again", title: "BACK AGAIN?", weight: 3, rarity: "rare",
+      requires: { minAnomaly: 4, service: "fuel", stopped: true },
+      text: "The attendant works the hand pump, looks at you a beat too long, and says: \"Back again? You made better time last go-round.\"\n\nYou have never been here before.",
       choices: [
-        { label: "\"You must be thinking of someone else.\"", outcomes: [
-          { w: 1, text: "He agrees pleasantly and goes back to his crossword. As you leave he says, without looking up, \"Drive safe, now. Watch for 414.\"", effects: { stress: 14, anomaly: 3, flag: "heard_414" } }
+        { label: "\"You've got me confused with someone.\"", outcomes: [
+          { w: 1, text: "He agrees pleasantly. As you leave, without looking up: \"Drive safe. Watch for 414.\"", effects: { stress: 14, anomaly: 3, flag: "heard_414" } }
         ] },
         { label: "\"How much better?\"", outcomes: [
           { w: 1, text: "He checks a notebook under the counter, runs a finger down a column, and reads your name.", effects: { stress: 20, anomaly: 4, flag: "the_notebook" } }
         ] }
-      ]
-    }
+      ] },
+
+    { id: "exit_414", title: "EXIT 414", weight: 2, rarity: "rare",
+      requires: { minAnomaly: 7, minMile: 600 },
+      text: "The sign is green and clean and correct in every way except that there is no town on it. No services. No distance.\n\nJust: EXIT 414 — NEXT EXIT.\n\nYour map has nothing here. The odometer says you are eleven miles from where the map says you are.",
+      choices: [
+        { label: "Take the exit", outcomes: [
+          { w: 1, text: "The ramp curves down and east, which is the wrong direction for a ramp on this side of the highway. At the bottom there is a stop sign, a crossroad, and no traffic in either direction.\n\nYou sit there a while. Then you get back on the interstate.\n\nThe next mile marker is the one you passed twenty minutes ago.", effects: { time: 40, stress: 30, anomaly: 5, flag: "took_414", achievement: "one_more_exit", souvenir: "A photograph of a sign for Exit 414" } }
+        ] },
+        { label: "Keep driving", outcomes: [
+          { w: 1, text: "You pass it. In the mirror the sign is still there, getting smaller, and then it isn't there, and the gap in the guardrail where the ramp was is just guardrail.", effects: { stress: 22, anomaly: 3, flag: "saw_414" } }
+        ] }
+      ] }
   ];
 
-  // ---------------------------------------------------------------- achievements
   const achievements = [
-    { id: "arrived", name: "Are We There Yet?", desc: "Complete your first trip." },
+    { id: "arrived", name: "One Piece", desc: "Reach Boston." },
     { id: "probably_fine", name: "Probably Fine", desc: "Turn the radio up instead of dealing with the check-engine light." },
-    { id: "shortcut", name: "I Know A Shortcut", desc: "Become lost." },
     { id: "luxury", name: "Luxury Accommodations", desc: "Sleep in your vehicle." },
-    { id: "never_again", name: "Never Again", desc: "Eat gas-station sushi." },
-    { id: "ten_mil", name: "Ten Millimeter", desc: "Lose a 10mm socket." },
-    { id: "found_it", name: "Found It", desc: "Recover one." },
-    { id: "tourist", name: "Roadside Americana", desc: "Stop at an attraction." },
+    { id: "never_again", name: "Never Again", desc: "Eat the unlabeled jerky and regret it." },
     { id: "tire_hero", name: "Jack Of One Trade", desc: "Change your own tire on the shoulder." },
-    { id: "thrifty", name: "Ran On Fumes", desc: "Arrive with less than a gallon in the tank." },
-    { id: "loaded", name: "Overpacked", desc: "Leave town with a full cargo area." }
+    { id: "back_on_wheels", name: "Back On Wheels", desc: "Find a running vehicle while on foot." },
+    { id: "long_walk", name: "The Long Walk", desc: "Cover twenty miles on foot." },
+    { id: "trader", name: "Horse Trading", desc: "Swap vehicles at a lot." },
+    { id: "halfway", name: "The Mississippi", desc: "Cross into the eastern half of the country." },
+    { id: "thrifty", name: "Fumes", desc: "Reach a settlement with under a gallon left." },
+    { id: "one_more_exit", name: "One More Exit", desc: "Take Exit 414." }
   ];
 
-  return { route, vehicles, careers, items, events, achievements };
+  return { route, regions, vehicles, careers, items, events, achievements };
 })();
