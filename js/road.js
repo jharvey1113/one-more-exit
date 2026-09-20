@@ -17,9 +17,14 @@ window.OME_ROAD = (() => {
   const hillAt = i => Math.sin(i / 150) * 2200 + Math.sin(i / 47) * 520 + Math.sin(i / 19) * 90;
 
   const lerp = (a, b, t) => a + (b - a) * t;
+  // accepts #rrggbb or rgb(r,g,b), so blended colours can be blended again
+  const parse = c => {
+    if (c[0] === "#") return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+    const m = c.match(/-?\d+/g);
+    return m ? [+m[0], +m[1], +m[2]] : [0, 0, 0];
+  };
   const mix = (c1, c2, t) => {
-    const p = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-    const [r1, g1, b1] = p(c1), [r2, g2, b2] = p(c2);
+    const [r1, g1, b1] = parse(c1), [r2, g2, b2] = parse(c2);
     return `rgb(${Math.round(lerp(r1, r2, t))},${Math.round(lerp(g1, g2, t))},${Math.round(lerp(b1, b2, t))})`;
   };
 
@@ -57,6 +62,9 @@ window.OME_ROAD = (() => {
     if (hour < 19) return 1 - (hour - 17) / 2 * 0.5;
     return 0.5 - (hour - 19) / 1.5 * 0.5;
   };
+
+  // what the low sun paints on everything at either end of the day
+  const lowSunTint = hour => (hour < 8 ? "#ffb070" : hour > 17 ? "#ff9152" : "#dfe6f0");
 
   const project = (p, camX, camY, camZ, width, height) => {
     const scale = CAM_D / Math.max(1, p.z - camZ);
@@ -169,10 +177,10 @@ window.OME_ROAD = (() => {
 
   // ---------------------------------------------------------------- main draw
   function draw(ctx, w, h, st) {
-    const { mile, hour, region, colors, weather, speedMph, night, onFoot, vehicleCond, wipers } = st;
+    const { mile, camZ: camZin, hour, region, colors, weather, speedMph, night, onFoot } = st;
     const light = daylight(hour);
     const sky = skyColors(hour);
-    const camZ = mile * 5280;
+    const camZ = camZin != null ? camZin : mile * 5280;
     const baseSeg = Math.floor(camZ / SEG);
     const horizonY = h * 0.42;
 
@@ -214,18 +222,47 @@ window.OME_ROAD = (() => {
       ctx.beginPath(); ctx.arc(mx + 6, my - 4, 13, 0, Math.PI * 2); ctx.fill();
     }
 
-    // ---- distant ridgeline, drifting with the road ----
-    const ridge = mix(colors.ground, sky.bot, 0.55 + (1 - light) * 0.25);
-    ctx.fillStyle = mix("#0a0d16", ridge, 0.25 + light * 0.75);
-    const drift = (camZ / 900) % 260;
-    for (let i = -1; i < 10; i++) {
-      const bx = i * 260 - drift;
-      const bh = (region === "hills" || region === "northeast" ? 78 : 44) + hash(i + baseSeg / 400 | 0) * 40;
+    // ---- clouds, catching whatever light the hour has ----
+    const cloudLight = Math.max(0, Math.min(1, light));
+    for (let i = 0; i < 7; i++) {
+      const seed = i * 13.7 + Math.floor(camZ / 900000);
+      const cy = horizonY * (0.16 + hash(seed) * 0.5);
+      const cw = w * (0.16 + hash(seed * 2.1) * 0.3);
+      const cx = ((hash(seed * 3.3) * 1.6 - 0.3) * w + camZ / 5200) % (w * 1.7) - w * 0.35;
+      const warm = mix("#ffffff", lowSunTint(hour), 1 - cloudLight);
+      ctx.globalAlpha = 0.09 + hash(seed * 5.5) * 0.2;
+      ctx.fillStyle = mix(warm, sky.bot, 0.25);
+      for (let k = 0; k < 4; k++) {
+        const px = cx + (k - 1.5) * cw * 0.24;
+        const py = cy + (hash(seed + k) - 0.5) * horizonY * 0.05;
+        ctx.beginPath();
+        ctx.ellipse(px, py, cw * (0.18 + hash(seed * 7 + k) * 0.14), horizonY * 0.033, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---- three ridgelines, each hazier and slower than the one in front ----
+    const tall = region === "hills" || region === "northeast" ? 1.5 : region === "rust" || region === "farm" ? 0.5 : 1;
+    for (let layer = 2; layer >= 0; layer--) {
+      const haze = 0.62 - layer * 0.16;                       // far ridges wash out into the sky
+      const ridgeCol = mix(mix("#0a0d16", colors.ground, 0.3 + light * 0.7), sky.bot, haze);
+      ctx.fillStyle = ridgeCol;
+      const span = 180 + layer * 120;
+      const drift = (camZ / (1400 + layer * 1800)) % span;
       ctx.beginPath();
-      ctx.moveTo(bx, horizonY + 2);
-      ctx.lineTo(bx + 80, horizonY - bh);
-      ctx.lineTo(bx + 150, horizonY - bh * 0.5);
-      ctx.lineTo(bx + 240, horizonY + 2);
+      ctx.moveTo(-span, horizonY + 3);
+      for (let i = -1; i < Math.ceil(w / span) + 2; i++) {
+        const bx = i * span - drift;
+        const seed = i + layer * 37 + Math.floor(camZ / 260000);
+        const bh = (18 + layer * 16 + hash(seed) * 46) * tall * (1 - layer * 0.12);
+        const shoulder = 0.3 + hash(seed * 1.7) * 0.4;
+        ctx.lineTo(bx, horizonY + 3);
+        ctx.lineTo(bx + span * shoulder, horizonY - bh);
+        ctx.lineTo(bx + span * (shoulder + 0.18), horizonY - bh * (0.6 + hash(seed * 2.3) * 0.3));
+        ctx.lineTo(bx + span, horizonY + 3);
+      }
+      ctx.lineTo(w + span, horizonY + 3);
       ctx.closePath(); ctx.fill();
     }
 
@@ -237,10 +274,17 @@ window.OME_ROAD = (() => {
     const road2 = mix("#0a0d14", "#44464c", groundLight);
     const rumble1 = mix("#0a0d14", "#b8b2a4", groundLight);
     const rumble2 = mix("#0a0d14", "#8d1f1f", groundLight);
-    const lane = mix("#0a0d14", "#e8dcb0", groundLight);
+    const lane = mix("#0a0d14", "#ddd0a2", groundLight);
+    const shoulderCol = mix("#0a0d14", mix(colors.ground, "#cfc5b2", 0.45), groundLight);
 
     ctx.fillStyle = grass1;
     ctx.fillRect(0, horizonY, w, h - horizonY);
+    // ground haze near the horizon so the desert floor doesn't read as a flat slab
+    const gh = ctx.createLinearGradient(0, horizonY, 0, horizonY + (h - horizonY) * 0.5);
+    gh.addColorStop(0, mix(grass1, sky.bot, 0.55));
+    gh.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = gh;
+    ctx.fillRect(0, horizonY, w, (h - horizonY) * 0.5);
 
     let x = 0, dx = 0;
     const camY = CAM_H + hillAt(baseSeg);
@@ -256,13 +300,41 @@ window.OME_ROAD = (() => {
       if (p1.z - camZ < CAM_D * 40 || p2.sy >= maxY) continue;
       maxY = p2.sy;
       const even = Math.floor(i / 6) % 2 === 0;
-      poly(ctx, p1.sx, p1.sy, w * 2, p2.sx, p2.sy, w * 2, even ? grass1 : grass2);
-      poly(ctx, p1.sx, p1.sy, p1.sw * 1.16, p2.sx, p2.sy, p2.sw * 1.16, even ? rumble1 : rumble2);
-      poly(ctx, p1.sx, p1.sy, p1.sw, p2.sx, p2.sy, p2.sw, even ? road1 : road2);
+      const gTone = hash(i * 0.91);                          // scrubby, uneven ground
+      poly(ctx, p1.sx, p1.sy, w * 2, p2.sx, p2.sy, w * 2,
+           gTone > 0.72 ? grass2 : gTone < 0.2 ? mix(grass1, "#ffffff", 0.05) : grass1);
+      // gravel shoulder, then the rumble strip, then asphalt
+      poly(ctx, p1.sx, p1.sy, p1.sw * 1.42, p2.sx, p2.sy, p2.sw * 1.42, shoulderCol);
+      poly(ctx, p1.sx, p1.sy, p1.sw * 1.14, p2.sx, p2.sy, p2.sw * 1.14, even ? rumble1 : rumble2);
+      const patch = hash(i * 3.77);                          // tar patches and old repairs
+      const asphalt = patch > 0.93 ? mix(road1, "#000000", 0.28)
+                    : patch < 0.06 ? mix(road1, "#ffffff", 0.07)
+                    : (even ? road1 : road2);
+      poly(ctx, p1.sx, p1.sy, p1.sw, p2.sx, p2.sy, p2.sw, asphalt);
+      // worn wheel tracks, slightly polished
+      poly(ctx, p1.sx - p1.sw * 0.46, p1.sy, p1.sw * 0.17, p2.sx - p2.sw * 0.46, p2.sy, p2.sw * 0.17,
+           mix(asphalt, "#ffffff", 0.05));
+      poly(ctx, p1.sx + p1.sw * 0.46, p1.sy, p1.sw * 0.17, p2.sx + p2.sw * 0.46, p2.sy, p2.sw * 0.17,
+           mix(asphalt, "#ffffff", 0.05));
+      if (i % 9 === 0) {                                     // expansion seams across the slab
+        poly(ctx, p1.sx, p1.sy, p1.sw, p2.sx, p2.sy, p2.sw * 0.995, mix(asphalt, "#000000", 0.2));
+      }
       if (even) {
-        poly(ctx, p1.sx, p1.sy, p1.sw * 0.03, p2.sx, p2.sy, p2.sw * 0.03, lane);
-        poly(ctx, p1.sx + p1.sw * 0.92, p1.sy, p1.sw * 0.02, p2.sx + p2.sw * 0.92, p2.sy, p2.sw * 0.02, lane);
-        poly(ctx, p1.sx - p1.sw * 0.92, p1.sy, p1.sw * 0.02, p2.sx - p2.sw * 0.92, p2.sy, p2.sw * 0.02, lane);
+        poly(ctx, p1.sx, p1.sy, p1.sw * 0.028, p2.sx, p2.sy, p2.sw * 0.028,
+             hash(i * 5.3) > 0.82 ? mix(lane, asphalt, 0.5) : lane);   // faded dashes
+      }
+      poly(ctx, p1.sx + p1.sw * 0.93, p1.sy, p1.sw * 0.022, p2.sx + p2.sw * 0.93, p2.sy, p2.sw * 0.022, lane);
+      poly(ctx, p1.sx - p1.sw * 0.93, p1.sy, p1.sw * 0.022, p2.sx - p2.sw * 0.93, p2.sy, p2.sw * 0.022, lane);
+      if (p1.sw > 6) {                       // loose scrub so the ground isn't a painted slab
+        const d1 = hash(i * 11.3);
+        if (d1 > 0.45) {
+          const side = d1 > 0.72 ? 1 : -1;
+          const off = 1.5 + hash(i * 13.9) * 3.4;
+          ctx.fillStyle = mix(grass2, "#000000", 0.25);
+          ctx.beginPath();
+          ctx.ellipse(p1.sx + p1.sw * off * side, p1.sy, p1.sw * 0.09, p1.sw * 0.045, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       drawn.push({ i, p: p1 });
     }

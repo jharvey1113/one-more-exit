@@ -200,7 +200,7 @@
   }
 
   function advance(dt) {
-    const mins = dt * 60 * speed;
+    const mins = dt * 20 * speed;
     const mph = S.onFoot ? 3
       : 58 * (grade() === "climb" ? 0.9 : 1) * (S.vehicle < 40 ? 0.72 : 1) * (S.vehicle < 18 ? 0.62 : 1) * (isNight() ? 0.85 : 1);
     const miles = (mph / 60) * mins;
@@ -338,9 +338,11 @@
   // Encounters are paced by distance, not by frames, so speed never floods you.
   function maybeEvent() {
     if (!$("eventCard").hidden) return;
-    if (S.nextEventMile == null) S.nextEventMile = S.mile + 25 + Math.random() * 45;
+    if (S.nextEventMile == null) S.nextEventMile = S.mile + 55 + Math.random() * 70;
     if (S.mile < S.nextEventMile) return;
-    S.nextEventMile = S.mile + 30 + Math.random() * 50;
+    if (S.minutes - (S.lastEventAt || -999) < 90) return;   // at least an hour and a half apart
+    S.lastEventAt = S.minutes;
+    S.nextEventMile = S.mile + 75 + Math.random() * 110;
     const c = ctxNow();
     const pool = C.events.filter(e => eligible(e, c) && !(e.requires || {}).stopped && !(e.requires || {}).service);
     if (pool.length) fireEvent(pickWeighted(pool), c);
@@ -576,8 +578,8 @@
 
     const c = ctxNow({ stopped: true, services: n.services });
     const pool = C.events.filter(e => eligible(e, c) && ((e.requires || {}).stopped || (e.requires || {}).service));
-    const townGap = S.mile - (S.lastTownEventMile || -200);
-    if (pool.length && townGap > 120 && Math.random() < 0.45) {
+    const townGap = S.mile - (S.lastTownEventMile || -400);
+    if (pool.length && townGap > 260 && Math.random() < 0.35) {
       S.lastTownEventMile = S.mile;
       setTimeout(() => { if ($("eventCard").hidden) fireEvent(pickWeighted(pool), c); }, 500);
     }
@@ -801,7 +803,7 @@
     $("hudNext").textContent = nn ? `${nn.name} in ${Math.max(0, Math.round(nn.mile - S.mile))} mi` : "";
   }
 
-  let scroll = 0, weather = { kind: "clear", until: 0 }, glint = null;
+  let scroll = 0, visualZ = 0, weather = { kind: "clear", until: 0 }, glint = null;
 
   function weatherNow() {
     if (!S) return "clear";
@@ -831,10 +833,15 @@
     const hour = S ? (S.minutes % (24 * 60)) / 60 : 18.4;
     const wx = S ? weatherNow() : "clear";
     const mph = speedNow();
-    if (travelling && S) scroll += dt * mph;
+    if (travelling && S) {
+      scroll += dt * mph;
+      // feet per real second at the speed shown on the dial (never a blur, even at 8x)
+      visualZ += dt * mph * 1.467 * Math.min(speed, 2.5);
+    }
 
     const st = {
       mile: S ? S.mile : 0,
+      camZ: visualZ,
       hour,
       region: S ? region() : "desert",
       colors: S ? regionInfo() : C.regions.desert,
@@ -1126,11 +1133,16 @@
     }));
   }
   function radioTick() {
-    if (!S || !S.radio) return;
+    if (!S) return;
+    if (S.radio == null) {                       // default to a voice from up the road
+      const list = stationsHere();
+      const idx = list.findIndex(x => x.kind === "voice");
+      S.radio = idx >= 0 ? idx : 0;
+    }
     const st = currentStation();
     if (!st || st.kind !== "voice") return;
     if (S.mile < (S.nextBroadcast || 0)) return;
-    S.nextBroadcast = S.mile + 22 + Math.random() * 34;
+    S.nextBroadcast = S.mile + 9 + Math.random() * 16;
     const kinds = ["weather", "fuel", "road", "people", "ordinary"];
     let kind = kinds[Math.floor(Math.random() * kinds.length)];
     if (account.anomaly > 3 && Math.random() < 0.12) kind = "strange";
