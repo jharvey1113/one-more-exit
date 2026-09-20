@@ -10,7 +10,9 @@ Phoenix to Boston: 2,762 miles across a country that mostly still works. Power c
 
 - Character creation: name, a former career (starting cash and skills) and a vehicle
 - Supplies limited by cargo space; fuel you carry in cans is fuel nobody can refuse to sell you
-- A side-scrolling drive east through seven regions, from Sonoran desert to the Rust Belt to New England, day and night
+- The drive is seen through the windshield: a road with curves and crests running to the horizon, sun and moon on a real daily arc, long sunsets, rain, snow, dust and fog, and a dashboard whose gauges actually read
+- Engine, tyres and wind respond to speed and to how rough the vehicle has become
+- A radio you can tune: stations broadcast from ahead of you with fuel, weather and road reports, and you pick up more of them the further east you get
 - Twenty-six stops: fuel that may or may not exist, food, repairs, beds, markets, paid work and vehicle lots
 - Vehicles can be traded, lost or abandoned — you can continue on foot at three miles an hour
 - Settlements are checkpoints: reach one and you can always start again from there

@@ -94,7 +94,12 @@
     .shop-price { grid-column: 1; }
   }
 
-  #road { display: block; width: 100%; height: min(44vh, 300px); border-radius: 10px; background: #0b1030; }
+  #road { display: block; width: 100%; height: min(56vh, 420px); border-radius: 10px; background: #0b1030; cursor: crosshair; }
+  .ticker { margin: 8px 0 0; min-height: 20px; font-family: var(--type); font-size: 14px; color: #cfe6d6; }
+  .radio { margin-top: 10px; background: var(--panel); border-radius: 10px; padding: 12px 14px; box-shadow: inset 0 0 0 2px var(--line); }
+  .radio-dial { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .radio-name { font-weight: 800; letter-spacing: 0.06em; color: var(--amber); font-variant-numeric: tabular-nums; }
+  .radio-note { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
   .hud { display: grid; grid-template-columns: repeat(auto-fit, minmax(86px, 1fr)); gap: 8px; margin-top: 10px; }
   .stat { background: var(--panel); border-radius: 8px; padding: 8px 10px; }
   .stat b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; line-height: 1.15; }
@@ -242,11 +247,23 @@
       <div class="stat"><b id="hudStress">10</b><span>Stress</span></div>
       <div class="stat"><b id="hudClock">D1 8:00 AM</b><span>Day / time</span></div>
     </div>
+    <p class="ticker" id="radioTicker"></p>
+    <div class="radio" id="radioPanel" hidden>
+      <div class="radio-dial">
+        <button class="btn ghost small" id="btnTuneDown" type="button">◀ Tune</button>
+        <span class="radio-name" id="radioName">88.1 Unattended music</span>
+        <button class="btn ghost small" id="btnTuneUp" type="button">Tune ▶</button>
+        <button class="btn ghost small" id="btnAmb" type="button" aria-pressed="true">Engine on</button>
+      </div>
+      <p class="radio-note" id="radioNote"></p>
+      <div id="radioLog"></div>
+    </div>
     <div class="row spread" style="margin-top:12px">
       <span><span class="nextsign" id="hudNext"></span><br><span class="region" id="hudRegion"></span></span>
       <span class="row">
         <button class="btn small" id="btnGo" type="button">Pause</button>
         <button class="btn ghost small" id="btnSpeed" type="button">1×</button>
+        <button class="btn ghost small" id="btnRadio" type="button">Radio</button>
         <button class="btn ghost small" id="btnLog" type="button">Log</button>
       </span>
     </div>
@@ -300,6 +317,8 @@
 <div class="flash" id="flash"></div>
 
 <script src="js/content.js"></script>
+<script src="js/road.js"></script>
+<script src="js/ambience.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/music.js"></script>
 <script src="js/game.js"></script>

@@ -3,6 +3,8 @@
 (() => {
   const C = window.OME_CONTENT;
   const MUS = window.OME_MUSIC;
+  const ROAD = window.OME_ROAD;
+  const AMB = window.OME_AMB || { init(){}, update(){}, toggle:()=>false, wiper(){}, blinker(){} };
   // if the sync script is missing or blocked, the game plays on, locally
   const SYNC = window.OME_SYNC || { enabled: false, group: "family",
     load: async () => null, push: async () => {}, board: async () => [] };
@@ -113,7 +115,7 @@
     S = {
       name, career: career.id, vehicleId: v.id, vehicleName: v.name,
       skills: Object.assign({ mechanical: 0, navigation: 0, firstAid: 0, cooking: 0, social: 0, outdoors: 0 }, career.skills),
-      cash: career.cash, fuelGal: v.tankGal * 0.6,
+      cash: career.cash, fuelGal: v.tankGal,
       health: 100, energy: 100, stress: 10, vehicle: 86,
       mile: 0, minutes: 8 * 60, inventory: { water: 1, food: 1 },
       log: [], souvenirs: [], seen: {}, spent: 0, fuelUsed: 0, events: 0,
@@ -166,7 +168,9 @@
     pushProgress(true);
     logLine(`Left Phoenix at ${clockText()} with $${Math.round(S.cash)} and ${fuelPct()}% of a tank. Boston is ${destMile()} miles away.`);
     show("travel");
+    AMB.init();
     MUS.start(); syncMood();
+    renderRadio();
     save();
     setTravel(true);
   }
@@ -186,13 +190,19 @@
     if (travelling) advance(dt);
     draw(dt);
     hud();
+    if (S) {
+      const mph = !travelling ? 0 : S.onFoot ? 3
+        : 58 * (grade() === "climb" ? 0.9 : 1) * (S.vehicle < 40 ? 0.72 : 1) * (isNight() ? 0.85 : 1);
+      AMB.update({ moving: travelling, mph, condition: S.vehicle, weather: weatherNow(),
+                   onFoot: S.onFoot, engineLoad: grade() === "climb" ? 1 : 0 });
+    }
     raf = requestAnimationFrame(frame);
   }
 
   function advance(dt) {
     const mins = dt * 60 * speed;
     const mph = S.onFoot ? 3
-      : 58 * (grade() === "climb" ? 0.9 : 1) * (S.vehicle < 40 ? 0.8 : 1) * (isNight() ? 0.85 : 1);
+      : 58 * (grade() === "climb" ? 0.9 : 1) * (S.vehicle < 40 ? 0.72 : 1) * (S.vehicle < 18 ? 0.62 : 1) * (isNight() ? 0.85 : 1);
     const miles = (mph / 60) * mins;
     S.minutes += mins;
     S.mile += miles;
@@ -205,13 +215,74 @@
       const used = miles / mpg;
       S.fuelGal = Math.max(0, S.fuelGal - used);
       S.fuelUsed += used;
-      S.vehicle = clamp(S.vehicle - miles * 0.006, 0, 100);
+      S.vehicle = clamp(S.vehicle - miles * 0.0022, 0, 100);
     }
-    S.energy = clamp(S.energy - mins * (S.onFoot ? 0.09 : 0.05), 0, 100);
-    S.health = clamp(S.health - (S.energy < 12 ? mins * 0.02 : 0) - (S.onFoot ? mins * 0.004 : 0), 0, 100);
+    S.grime = Math.min(1, (S.grime || 0) + miles * 0.0016);
+    S.energy = clamp(S.energy - mins * (S.onFoot ? 0.07 : 0.035), 0, 100);
+    S.health = clamp(S.health - (S.energy < 12 ? mins * 0.012 : 0) - (S.onFoot ? mins * 0.003 : 0), 0, 100);
     S.stress = clamp(S.stress + (S.energy < 25 ? mins * 0.02 : -mins * 0.004), 0, 100);
 
-    if (!S.onFoot && S.fuelGal <= 0) return stranded("Out of fuel");
+    if (!S.onFoot) {                       // warnings first: nothing dies without telling you
+      const pct = S.fuelGal / veh().tankGal;
+      if (pct < 0.12 && !S.warnedFuel) {
+        S.warnedFuel = true;
+        flash("Fuel light. Next town is " + Math.max(1, Math.round(nextNode().mile - S.mile)) + " miles.");
+      }
+      if (pct > 0.25) S.warnedFuel = false;
+      if (S.vehicle < 28 && !S.warnedVeh) {
+        S.warnedVeh = true;
+        flash("Something under the hood is telling you about itself.");
+      }
+      if (S.vehicle > 40) S.warnedVeh = false;
+    }
+    if (!S.onFoot && S.fuelGal <= 0) {
+      if (has("jerry") && (S.jerryFuel || 0) > 0) {        // use what you carried
+        const pour = Math.min(veh().tankGal * 0.5, S.jerryFuel);
+        S.jerryFuel -= pour; S.fuelGal += pour; S.minutes += 15;
+        flash("You pour in the cans. That buys you " + Math.round(pour * veh().mpg) + " miles.");
+      } else if (!S.beggedFuel) {                          // one roadside rescue per run
+        S.beggedFuel = true;
+        stopTravel();
+        S.minutes += 55;
+        const price = 60 + Math.round(Math.random() * 60);
+        $("eventTitle").textContent = "THE ENGINE GOES QUIET";
+        $("eventText").textContent = "You coast onto the shoulder with the wheel gone heavy. After the better part of an hour, a flatbed slows down. The driver has a drum in the back and no particular hurry.";
+        $("eventChoices").replaceChildren();
+        $("eventOutcome").textContent = "";
+        const choice = (label, fn) => {
+          const b = document.createElement("button");
+          b.type = "button"; b.className = "choice"; b.textContent = label;
+          b.addEventListener("click", fn);
+          $("eventChoices").append(b);
+        };
+        choice(`Buy five gallons — $${price}`, () => {
+          if (S.cash < price) { flash("You don't have it."); return; }
+          S.cash -= price; S.spent += price; S.fuelGal += 5;
+          $("eventChoices").replaceChildren();
+          $("eventOutcome").textContent = "He funnels it in, waves off the thanks, and is gone before you get his name.";
+          $("eventClose").hidden = false;
+        });
+        choice("Trade something for it", () => {
+          const tradable = ["jerky", "tools", "radio", "blanket", "mug"].find(has);
+          $("eventChoices").replaceChildren();
+          if (tradable) {
+            dropItem(tradable); S.fuelGal += 4;
+            $("eventOutcome").textContent = "He looks it over, shrugs, and pumps four gallons. Out here that is a fair trade and you both know it.";
+          } else {
+            $("eventOutcome").textContent = "You have nothing he wants. He is sorry about it, and he means it, and he leaves.";
+          }
+          $("eventClose").hidden = false;
+        });
+        choice("Walk from here", () => {
+          $("eventCard").hidden = true;
+          goOnFoot();
+          show("travel"); setTravel(true);
+        });
+        $("eventClose").hidden = true;
+        $("eventCard").hidden = false;
+        return;
+      } else return stranded("Out of fuel");
+    }
     if (!S.onFoot && S.vehicle <= 0) return stranded("The vehicle finally quit");
     if (S.health <= 0) return over("You didn't make it", "Somewhere in the middle of the country, a long way from both coasts.");
     if (S.mile >= destMile()) return arrive();
@@ -224,6 +295,7 @@
       return openStop(due);
     }
     maybeEvent();
+    radioTick();
     if (Math.random() < 0.004) { syncMood(); pushProgress(); }
   }
 
@@ -374,8 +446,8 @@
     // whether this place has fuel today, and what it costs, decided once per visit
     if (!S.fuelInfo) S.fuelInfo = {};
     if (!S.fuelInfo[n.id]) {
-      const available = Math.random() < (n.fuelChance != null ? n.fuelChance : 0.6);
-      const base = 3.4 + (n.kind === "settlement" ? 0.6 : 1.5) * Math.random() + S.mile / 2600;
+      const available = Math.random() < Math.min(1, (n.fuelChance != null ? n.fuelChance : 0.6) + 0.2);
+      const base = 3.1 + (n.kind === "settlement" ? 0.5 : 1.1) * Math.random() + S.mile / 3400;
       S.fuelInfo[n.id] = { available, price: Math.round(base * 100) / 100 };
     }
     return S.fuelInfo[n.id];
@@ -461,6 +533,11 @@
       acts.push(action("Sleep here — $45", "A bed, a door that locks.", S.cash >= 45, () => {
         S.cash -= 45; S.spent += 45; S.energy = 100; S.health = clamp(S.health + 12, 0, 100);
         S.stress = clamp(S.stress - 25, 0, 100); S.minutes += 8 * 60; refreshStop(n);
+      }));
+    }
+    if (!S.onFoot && (S.grime || 0) > 0.25) {
+      acts.push(action("Clean the windshield", "Bugs, dust and three states of road film.", true, () => {
+        S.grime = 0; S.minutes += 10; flash("You can see again."); refreshStop(n);
       }));
     }
     acts.push(action("Sleep in the vehicle — free", S.onFoot ? "Sleep rough, off the road." : "Seat back, doors locked.", true, () => {
@@ -726,228 +803,109 @@
 
   let scroll = 0, weather = { kind: "clear", until: 0 }, glint = null;
 
-  // Weather rolls over slowly and belongs to the region and the hour.
   function weatherNow() {
     if (!S) return "clear";
     if (S.mile > weather.until) {
-      weather.until = S.mile + 60 + Math.random() * 160;
+      weather.until = S.mile + 90 + Math.random() * 220;
       const r = region(), roll = Math.random();
-      weather.kind = r === "desert" || r === "mesa" ? (roll < 0.12 ? "dust" : "clear")
-        : r === "plains" ? (roll < 0.2 ? "rain" : roll < 0.28 ? "wind" : "clear")
-        : r === "farm" ? (roll < 0.26 ? "rain" : "clear")
-        : r === "rust" || r === "hills" ? (roll < 0.22 ? "rain" : roll < 0.3 ? "fog" : "clear")
-        : (roll < 0.2 ? "rain" : roll < 0.3 ? "snow" : "clear");
+      weather.kind = r === "desert" || r === "mesa" ? (roll < 0.1 ? "dust" : "clear")
+        : r === "plains" ? (roll < 0.18 ? "rain" : "clear")
+        : r === "farm" ? (roll < 0.22 ? "rain" : "clear")
+        : r === "rust" || r === "hills" ? (roll < 0.2 ? "rain" : roll < 0.27 ? "fog" : "clear")
+        : (roll < 0.18 ? "rain" : roll < 0.26 ? "snow" : "clear");
     }
     return weather.kind;
   }
 
+  const speedNow = () => !S ? 55 : !travelling ? 0 : S.onFoot ? 3
+    : 58 * (grade() === "climb" ? 0.9 : 1) * (S.vehicle < 40 ? 0.72 : 1) * (isNight() ? 0.85 : 1);
+
+  // The drive is seen through the windshield: the world, then the cab you're in.
   function draw(dt) {
     const c = $("road"), ctx = c.getContext("2d");
     const dpr = window.devicePixelRatio || 1;
     const w = c.clientWidth, h = c.clientHeight;
     if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const R = S ? regionInfo() : C.regions.desert;
-    const night = S ? isNight() : false;
+
+    const hour = S ? (S.minutes % (24 * 60)) / 60 : 18.4;
     const wx = S ? weatherNow() : "clear";
-    const moving = travelling ? dt * (S && S.onFoot ? 22 : 235) * Math.min(speed, 4) : 0;
-    scroll += moving;
+    const mph = speedNow();
+    if (travelling && S) scroll += dt * mph;
 
-    // ---- sky, sun and moon ----
-    const hour = S ? (S.minutes % (24 * 60)) / 60 : 12;
-    const dusk = !night && (hour < 7.5 || hour > 17.5);
-    const sky = ctx.createLinearGradient(0, 0, 0, h);
-    if (night) { sky.addColorStop(0, "#070a18"); sky.addColorStop(0.7, "#131a2f"); sky.addColorStop(1, "#1e2540"); }
-    else if (dusk) { sky.addColorStop(0, "#2d4a76"); sky.addColorStop(0.55, "#b8703f"); sky.addColorStop(1, "#e8b06a"); }
-    else { sky.addColorStop(0, R.sky[0]); sky.addColorStop(1, R.sky[1]); }
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+    const st = {
+      mile: S ? S.mile : 0,
+      hour,
+      region: S ? region() : "desert",
+      colors: S ? regionInfo() : C.regions.desert,
+      weather: wx,
+      speedMph: mph,
+      night: S ? isNight() : false,
+      onFoot: S ? S.onFoot : false,
+      vehicleCond: S ? S.vehicle : 90,
+      fuelPct: S ? fuelPct() : 100,
+      tempPct: S ? clamp(0.35 + (grade() === "climb" ? 0.28 : 0) + (100 - S.vehicle) / 240, 0, 1) : 0.4,
+      odo: S ? S.odo : 0,
+      wipers: wx === "rain",
+      grime: S ? Math.min(1, S.grime || 0) : 0
+    };
+    ROAD.draw(ctx, w, h, st);
 
-    const horizon = h * 0.62;
-    const arc = clamp((hour - 6) / 12, -0.2, 1.2);
-    const bodyX = w * (0.12 + arc * 0.76);
-    const bodyY = horizon - Math.sin(Math.max(0, arc) * Math.PI) * (h * 0.42) - 6;
-    if (night) {
-      ctx.fillStyle = "#fff";
-      for (let i = 0; i < 60; i++) {
-        ctx.globalAlpha = 0.22 + ((i * 7) % 12) / 26;
-        ctx.fillRect((i * 83) % w, (i * 47) % (h * 0.55), 1.6, 1.6);
-      }
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#e8eaf2";
-      ctx.beginPath(); ctx.arc(w * 0.76, h * 0.18, 16, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = night ? "#131a2f" : "#000";
-      ctx.beginPath(); ctx.arc(w * 0.76 + 7, h * 0.18 - 5, 14, 0, Math.PI * 2); ctx.fill();
-    } else {
-      ctx.fillStyle = dusk ? "#ffd7a0" : "#fff6d8";
-      ctx.globalAlpha = 0.9;
-      ctx.beginPath(); ctx.arc(bodyX, bodyY, dusk ? 20 : 15, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-    if (wx === "fog") { ctx.fillStyle = "rgba(190,200,205,0.28)"; ctx.fillRect(0, 0, w, h); }
-
-    // ---- far ridgeline ----
-    ctx.fillStyle = night ? "#101527" : shade(R.ground, -0.42);
-    for (let i = -1; i < 9; i++) {
-      const bx = (i * 230) - (scroll * 0.07) % 230;
-      const bh = R.plant === "pine" ? 74 + ((i * 41) % 58) : 34 + ((i * 37) % 46);
-      ctx.beginPath();
-      ctx.moveTo(bx, horizon); ctx.lineTo(bx + 70, horizon - bh);
-      ctx.lineTo(bx + 132, horizon - bh * 0.55); ctx.lineTo(bx + 205, horizon);
-      ctx.closePath(); ctx.fill();
-    }
-
-    // ---- ground ----
-    const g = ctx.createLinearGradient(0, horizon, 0, h);
-    g.addColorStop(0, night ? "#161a28" : shade(R.ground, -0.12));
-    g.addColorStop(1, night ? "#101320" : shade(R.ground, 0.06));
-    ctx.fillStyle = g; ctx.fillRect(0, horizon, w, h - horizon);
-
-    // ---- power lines marching along the highway ----
-    ctx.strokeStyle = night ? "#0d1017" : "rgba(40,45,50,0.55)";
-    ctx.lineWidth = 1.5;
-    const poleGap = 210, poleY = horizon + 4;
-    for (let i = -1; i < 7; i++) {
-      const x = (i * poleGap) - (scroll * 0.34) % poleGap;
-      ctx.fillStyle = night ? "#0d1017" : "#4a4f47";
-      ctx.fillRect(x, poleY - 62, 3.5, 62);
-      ctx.fillRect(x - 9, poleY - 58, 21, 3);
-      ctx.beginPath();
-      ctx.moveTo(x - 8, poleY - 55);
-      ctx.quadraticCurveTo(x + poleGap / 2, poleY - 44, x + poleGap - 8, poleY - 55);
-      ctx.stroke();
-    }
-
-    // ---- roadside growth ----
-    for (let i = -1; i < 12; i++) {
-      const x = (i * 140) - (scroll * 0.52) % 140;
-      const y = horizon + 14 + ((i * 29) % 14);
-      ctx.fillStyle = night ? "#0c0f18" : plantColor(R.plant);
-      drawPlant(ctx, R.plant, x, y);
-    }
-
-    // ---- the occasional dead vehicle ----
-    for (let i = -1; i < 4; i++) {
-      const x = (i * 640) - (scroll * 0.52) % 640;
-      const y = horizon + 34;
-      ctx.fillStyle = night ? "#0b0e15" : "#5a6058";
-      ctx.fillRect(x, y - 9, 32, 8);
-      ctx.fillRect(x + 7, y - 14, 15, 6);
-      ctx.fillStyle = night ? "#090b11" : "#3a3e38";
-      ctx.fillRect(x + 3, y - 2, 6, 3); ctx.fillRect(x + 22, y - 2, 6, 3);
-    }
-
-    // ---- the road, guardrail, mile markers and signs ----
-    const roadTop = h * 0.7;
-    ctx.fillStyle = night ? "#181a22" : "#41434a";
-    ctx.fillRect(0, roadTop, w, h - roadTop);
-    ctx.fillStyle = night ? "#242833" : "#5b5e67";
-    ctx.fillRect(0, roadTop, w, 3);
-    ctx.fillStyle = night ? "#3a3f4b" : "#6d7178";      // guardrail
-    for (let i = -1; i < 26; i++) {
-      const x = (i * 46) - (scroll * 0.8) % 46;
-      ctx.fillRect(x, roadTop - 13, 3, 13);
-    }
-    ctx.fillRect(0, roadTop - 15, w, 4);
-    ctx.fillStyle = night ? "#6f6a4e" : "#e7dcb4";      // lane dashes and shoulder line
-    const dash = 48, gap = 38, laneY = h * 0.86;
-    for (let x = -((scroll * 1.5) % (dash + gap)); x < w; x += dash + gap) ctx.fillRect(x, laneY, dash, 5);
-    ctx.fillRect(0, h - 10, w, 3);
-
-    if (S) {
-      // green mile markers, counting the real mileage
-      const markerGap = 150;
-      for (let i = -1; i < 8; i++) {
-        const x = (i * markerGap) - (scroll * 1.0) % markerGap;
-        const mile = Math.max(0, Math.round(S.mile + (x - w * 0.42) / 24));
-        ctx.fillStyle = night ? "#123524" : "#1d6b3c";
-        ctx.fillRect(x, roadTop - 34, 15, 20);
-        ctx.fillStyle = "#eef3ee";
-        ctx.font = "700 9px Overpass, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(String(mile % 1000), x + 7.5, roadTop - 21);
-      }
-      // a big green sign for the next town, appearing as you approach it
-      const nn = nextNode(), away = nn.mile - S.mile;
-      if (away < 12 && away > 0.2) {
-        const sx = w * 0.62 + (away / 12) * w * 0.9;
-        if (sx < w + 160) {
-          ctx.fillStyle = night ? "#123524" : "#1d6b3c";
-          ctx.fillRect(sx, horizon - 46, 150, 46);
-          ctx.strokeStyle = "#eef3ee"; ctx.lineWidth = 2;
-          ctx.strokeRect(sx + 3, horizon - 43, 144, 40);
-          ctx.fillStyle = "#6b7079";
-          ctx.fillRect(sx + 22, horizon, 5, 34); ctx.fillRect(sx + 120, horizon, 5, 34);
-          ctx.fillStyle = "#eef3ee";
-          ctx.font = "700 15px Overpass, sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText(nn.name.slice(0, 15), sx + 75, horizon - 26);
-          ctx.font = "600 12px Overpass, sans-serif";
-          ctx.fillText(Math.max(1, Math.round(away)) + " MILES", sx + 75, horizon - 10);
-        }
-      }
-      // something worth stopping for, sitting on the shoulder
-      if (!S.onFoot && travelling && !glint && Math.random() < 0.0016) {
-        glint = { x: w + 40, y: roadTop - 22, taken: false };
-      }
-      if (glint) {
-        glint.x -= moving * 1.0;
-        if (glint.x < -60) glint = null;
-        else {
-          const pulse = 0.55 + Math.sin(performance.now() / 180) * 0.45;
-          ctx.fillStyle = `rgba(255,224,130,${pulse})`;
-          ctx.beginPath(); ctx.arc(glint.x, glint.y, 7, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = "rgba(255,255,255,0.85)";
-          ctx.beginPath(); ctx.arc(glint.x, glint.y, 2.5, 0, Math.PI * 2); ctx.fill();
-        }
-      }
-    }
-
-    if (S && S.onFoot) drawWalker(ctx, w * 0.42, h * 0.83, night);
-    else drawVehicle(ctx, w * 0.42, h * 0.8 + (travelling ? Math.sin(scroll / 16) * 1.3 : 0), night);
-
-    // ---- weather over everything ----
     if (wx === "rain" || wx === "snow") {
-      const n = wx === "rain" ? 90 : 60;
-      ctx.strokeStyle = wx === "rain" ? "rgba(190,210,235,0.45)" : "rgba(255,255,255,0.75)";
-      ctx.fillStyle = "rgba(255,255,255,0.8)";
+      const n = wx === "rain" ? 70 : 45;
+      ctx.strokeStyle = wx === "rain" ? "rgba(200,215,235,0.4)" : "rgba(255,255,255,0.7)";
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
       ctx.lineWidth = 1.2;
       for (let i = 0; i < n; i++) {
-        const sx = (i * 137 + scroll * (wx === "rain" ? 3.5 : 0.8)) % (w + 60) - 30;
-        const sy = (i * 71 + scroll * (wx === "rain" ? 6 : 1.4)) % h;
-        if (wx === "rain") { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - 5, sy + 14); ctx.stroke(); }
+        const sx = (i * 137 + scroll * (wx === "rain" ? 22 : 5)) % (w + 60) - 30;
+        const sy = (i * 71 + scroll * (wx === "rain" ? 42 : 9)) % (h * 0.7);
+        if (wx === "rain") { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - 4, sy + 13); ctx.stroke(); }
         else { ctx.beginPath(); ctx.arc(sx, sy, 1.8, 0, Math.PI * 2); ctx.fill(); }
       }
-      if (wx === "rain") { ctx.fillStyle = "rgba(20,30,45,0.2)"; ctx.fillRect(0, 0, w, h); }
-    } else if (wx === "dust") {
-      ctx.fillStyle = "rgba(205,150,90,0.22)"; ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = "rgba(225,180,120,0.3)";
-      for (let i = 0; i < 40; i++) {
-        const sx = (i * 191 + scroll * 4) % (w + 40) - 20, sy = horizon + (i * 37) % (h - horizon);
-        ctx.fillRect(sx, sy, 16, 1.5);
+    }
+
+    if (S && S.onFoot) {
+      ctx.fillStyle = "rgba(10,12,18,0.5)";
+      ctx.fillRect(0, h * 0.93, w, h * 0.07);
+      ctx.fillStyle = "#c9cfd6";
+      ctx.font = "700 12px Overpass, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("ON FOOT", w / 2, h * 0.975);
+    } else {
+      ROAD.drawCab(ctx, w, h, st);
+    }
+
+    if (S && !S.onFoot && travelling && !glint && Math.random() < 0.0012) {
+      glint = { x: w * (0.6 + Math.random() * 0.3), y: h * (0.52 + Math.random() * 0.09), life: 3 };
+    }
+    if (glint) {
+      glint.life -= dt;
+      glint.x += dt * 80; glint.y += dt * 26;
+      if (glint.life <= 0) glint = null;
+      else {
+        const pulse = 0.5 + Math.sin(performance.now() / 150) * 0.5;
+        ctx.fillStyle = `rgba(255,228,150,${pulse})`;
+        ctx.beginPath(); ctx.arc(glint.x, glint.y, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.beginPath(); ctx.arc(glint.x, glint.y, 2, 0, Math.PI * 2); ctx.fill();
       }
     }
-    if (night) {                                        // vignette, so the dark feels dark
-      const v = ctx.createRadialGradient(w / 2, h * 0.7, h * 0.2, w / 2, h * 0.7, h);
-      v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,0.55)");
-      ctx.fillStyle = v; ctx.fillRect(0, 0, w, h);
-    }
-    // the weather gets a word, so the player knows why the road changed
+
     if (S && wx !== "clear") {
-      ctx.fillStyle = "rgba(0,0,0,0.45)";
-      ctx.fillRect(8, 8, 74, 22);
+      ctx.fillStyle = "rgba(0,0,0,0.42)";
+      ctx.fillRect(8, 8, 72, 21);
       ctx.fillStyle = "#eef1ec";
       ctx.font = "700 11px Overpass, sans-serif";
       ctx.textAlign = "left";
-      ctx.fillText(wx.toUpperCase(), 16, 23);
+      ctx.fillText(wx.toUpperCase(), 15, 22);
     }
   }
 
-  // tapping the glint pulls you over to look
   $("road").addEventListener("click", e => {
     if (!S || !glint || S.done) return;
     const r = $("road").getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
-    if (Math.hypot(x - glint.x, y - glint.y) > 34) return;
+    if (Math.hypot(x - glint.x, y - glint.y) > 40) return;
     glint = null;
     stopTravel();
     const finds = [
@@ -956,15 +914,15 @@
       { item: "jerky", text: "A gas-station bag with jerky in it. The date is smudged." },
       { item: "flashlight", text: "A flashlight. The batteries are even good." },
       { item: "water", text: "Four bottles of water in a cooler, still cold-ish." },
-      { item: null, text: "Broken glass, a shoe, and a receipt from a gas station in a town you haven't reached yet." }
+      { item: null, text: "Broken glass, a shoe, and a receipt from a station in a town you haven't reached yet." }
     ];
     const find = finds[Math.floor(Math.random() * finds.length)];
     S.minutes += 12;
     if (find.item && bulkUsed() + 1 <= cargoCap()) addItem(find.item);
     else if (find.item) flash("No room to carry it.");
-    if (!find.item) account.anomaly += 1;
+    if (!find.item) { account.anomaly += 1; saveAccount(); }
     $("eventTitle").textContent = "ON THE SHOULDER";
-    $("eventText").textContent = "You pull over for something bright in the weeds.";
+    $("eventText").textContent = "You brake for something bright in the weeds.";
     $("eventOutcome").textContent = find.text;
     $("eventChoices").replaceChildren();
     $("eventClose").hidden = false;
@@ -1132,6 +1090,63 @@
   }
   const save = () => { if (S && !S.done) store.set(SAVE_KEY, S); };
 
+  // ---------------------------------------------------------------- radio
+  const RADIO = window.OME_RADIO || { stations: [], reports: {} };
+  function stationsHere() {
+    return RADIO.stations.filter(st =>
+      st.kind !== "voice" || (S.mile >= (st.from || 0) - 250 && S.mile <= (st.to || 99999)));
+  }
+  const currentStation = () => {
+    const list = stationsHere();
+    return list[Math.min(S.radio || 0, list.length - 1)] || list[0];
+  };
+  function tune(dir) {
+    const list = stationsHere();
+    if (!list.length) return;
+    S.radio = (((S.radio || 0) + dir) % list.length + list.length) % list.length;
+    const st = currentStation();
+    if (st.kind === "music") MUS.start(); else MUS.stop();
+    AMB.blinker();
+    renderRadio();
+    save();
+  }
+  function renderRadio() {
+    if (!S || !$("radioName")) return;
+    const st = currentStation();
+    if (!st) return;
+    $("radioName").textContent = `${st.freq}  ${st.name}`;
+    $("radioNote").textContent = st.kind === "voice"
+      ? `Coming in from ahead of you — ${st.host}.`
+      : st.blurb || "";
+    $("radioLog").replaceChildren(...(S.radioLog || []).slice(-4).reverse().map(line => {
+      const d = document.createElement("div");
+      d.className = "log-line";
+      d.textContent = line;
+      return d;
+    }));
+  }
+  function radioTick() {
+    if (!S || !S.radio) return;
+    const st = currentStation();
+    if (!st || st.kind !== "voice") return;
+    if (S.mile < (S.nextBroadcast || 0)) return;
+    S.nextBroadcast = S.mile + 22 + Math.random() * 34;
+    const kinds = ["weather", "fuel", "road", "people", "ordinary"];
+    let kind = kinds[Math.floor(Math.random() * kinds.length)];
+    if (account.anomaly > 3 && Math.random() < 0.12) kind = "strange";
+    const lines = RADIO.reports[kind] || [];
+    if (!lines.length) return;
+    const line = lines[Math.floor(Math.random() * lines.length)];
+    S.radioLog = (S.radioLog || []).concat(`${st.freq} — ${line}`).slice(-12);
+    if (kind === "strange") { account.anomaly += 1; saveAccount(); }
+    if ($("radioTicker")) {
+      $("radioTicker").textContent = line;
+      clearTimeout(radioTick.t);
+      radioTick.t = setTimeout(() => { if ($("radioTicker")) $("radioTicker").textContent = ""; }, 14000);
+    }
+    renderRadio();
+  }
+
   // ---------------------------------------------------------------- travelers
   const travelerName = () => (store.get("ome-name") || "").trim();
   let pushTimer = null, lastPush = 0;
@@ -1239,10 +1254,22 @@
   $("btnLaunch").addEventListener("click", () => launch());
   $("btnGo").addEventListener("click", () => setTravel(!travelling));
   $("btnSpeed").addEventListener("click", () => {
-    speed = speed === 1 ? 4 : speed === 4 ? 12 : speed === 12 ? 30 : 1;
+    speed = speed === 1 ? 2 : speed === 2 ? 4 : speed === 4 ? 8 : 1;
     $("btnSpeed").textContent = speed + "×";
   });
   $("btnLog").addEventListener("click", renderLog);
+  $("btnRadio").addEventListener("click", () => {
+    const panel = $("radioPanel");
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) renderRadio();
+  });
+  $("btnTuneDown").addEventListener("click", () => tune(-1));
+  $("btnTuneUp").addEventListener("click", () => tune(1));
+  $("btnAmb").addEventListener("click", () => {
+    const on = AMB.toggle();
+    $("btnAmb").textContent = on ? "Engine on" : "Engine off";
+    $("btnAmb").setAttribute("aria-pressed", String(on));
+  });
   $("btnLogBack").addEventListener("click", () => { show("travel"); hud(); });
   $("eventClose").addEventListener("click", closeEvent);
   $("btnLeaveStop").addEventListener("click", leaveStop);

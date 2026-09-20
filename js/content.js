@@ -581,3 +581,70 @@ window.OME_CONTENT = (() => {
 
   return { route, regions, vehicles, careers, items, events, achievements };
 })();
+
+/* ---------------------------------------------------------------- radio
+   Voices from down the road. The further east you get, the more you pick up,
+   and what they say about the next few hundred miles is usually true. */
+window.OME_RADIO = (() => {
+  const stations = [
+    { id: "music", freq: "88.1", name: "Unattended music", kind: "music",
+      blurb: "Somebody left a tape running in an empty station. It has not stopped." },
+    { id: "kphx", freq: "92.3", name: "Phoenix Relay", kind: "voice", from: 0, to: 700,
+      host: "a tired man reading from index cards" },
+    { id: "kabq", freq: "96.7", name: "Albuquerque Watch", kind: "voice", from: 250, to: 1100,
+      host: "a woman who says everything twice" },
+    { id: "kama", freq: "101.5", name: "Amarillo Roadhouse", kind: "voice", from: 600, to: 1500,
+      host: "two men who clearly do not like each other" },
+    { id: "kstl", freq: "104.9", name: "River Net", kind: "voice", from: 1150, to: 2000,
+      host: "a dispatcher with a river accent" },
+    { id: "kpit", freq: "107.1", name: "Three Rivers", kind: "voice", from: 1800, to: 2500,
+      host: "a man who used to do traffic" },
+    { id: "kbos", freq: "89.7", name: "Boston Harbor Signal", kind: "voice", from: 2200, to: 3000,
+      host: "a voice that sounds genuinely pleased you're coming" },
+    { id: "static", freq: "—", name: "Static", kind: "static",
+      blurb: "Nothing. Sometimes that's the point." }
+  ];
+
+  // Reports are written to be useful: weather, fuel, roads, people.
+  const reports = {
+    weather: [
+      "Wind advisory on the high stretch east of here. If you've got a high profile, keep both hands on it.",
+      "Rain moving across the plains tonight. It won't stop you, it'll just make the dark darker.",
+      "Dust is up west of the state line. Anyone out there, pull all the way off the pavement. All the way off.",
+      "Snow above six thousand feet. It's early for it. Carry a blanket."
+    ],
+    fuel: [
+      "Fuel report: pumps running at the junction, dry at the two exits after. Fill where you can.",
+      "Prices are up east of here. Not gouging, just up. Top off before the county line.",
+      "Somebody got a tanker through. There's diesel again at the big stop, first time in a month.",
+      "If you're running low, the farm with the white tank will sell you six gallons and talk your ear off."
+    ],
+    road: [
+      "Bridge is still one lane. Take turns. People have been taking turns.",
+      "There's a crew working the center span. They're not charging. They're just working.",
+      "Stay off the old highway north of the interchange. Washouts, and nobody's grading it.",
+      "Tunnel's lit and staffed. Toll's what it was last week."
+    ],
+    people: [
+      "Two cars nose to nose at the county line, charging for the privilege. They'll take twenty.",
+      "Convoy went through this morning, six vehicles, friendly enough. If they wave you in, you can take it.",
+      "If a woman named Mercy flags you down, she's worth the seat. She fixes what she rides in.",
+      "Be careful past dark on the long empty stretch. Not saying anything more than that."
+    ],
+    ordinary: [
+      "Birthday today for a girl in the east settlement. She is nine. Happy birthday.",
+      "Lost dog, brown, answers to Rooster, last seen near the water tower.",
+      "Market's Saturday. Bring what you don't need and take what you do.",
+      "Power's on from six to midnight. Charge what you've got."
+    ],
+    // rare, and never explained
+    strange: [
+      "…and for anyone running east tonight, watch your mileage. Watch it closely. We've had reports.",
+      "Repeating a message we were asked to read: the exit is not on the map and should not be taken.",
+      "If you passed a green sign about eleven miles back, and it wasn't there on your way out, you are not the first to call it in.",
+      "We've been asked to stop reading the numbers. So we'll stop reading the numbers."
+    ]
+  };
+
+  return { stations, reports };
+})();
