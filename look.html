@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1116">
+<title>One More Exit — look test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0d12; color: #eef1ec; font-family: "Overpass", system-ui, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 18px 16px 40px; }
+  h1 { font-size: clamp(22px, 5.5vw, 34px); letter-spacing: 0.04em; text-transform: uppercase; margin: 0 0 6px; }
+  p.lede { color: #99a29b; line-height: 1.55; margin: 0 0 18px; max-width: 62ch; }
+  .shot { margin: 0 0 22px; }
+  .shot h2 { font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; color: #e8b04b; margin: 0 0 6px; }
+  .shot p { margin: 6px 0 0; color: #99a29b; font-size: 14px; line-height: 1.5; }
+  canvas { display: block; width: 100%; height: min(52vh, 380px); border-radius: 10px; background: #000; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  a.btn, button {
+    font: inherit; border: 0; cursor: pointer; background: #e8b04b; color: #241a05;
+    font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 11px 20px; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 0 #96731c;
+  }
+  a.ghost { background: transparent; color: #eef1ec; box-shadow: inset 0 0 0 2px #3c444d; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Look test</h1>
+  <p class="lede">The same road, drawn as carefully as a browser canvas allows: sun bloom and atmospheric haze,
+    ground texture, worn and patched asphalt, wet reflections at night, rain on the glass, film grain and vignette.
+    Nothing here is a photo — it's all drawn by code, live, at whatever size your screen is.</p>
+
+  <div class="shot">
+    <h2>Golden hour · Sonoran desert</h2>
+    <canvas id="c1"></canvas>
+    <p>Low sun, long haze, heat shimmer above the asphalt, scrub and saguaro throwing shadows east.</p>
+  </div>
+
+  <div class="shot">
+    <h2>Night · rain in the Alleghenies</h2>
+    <canvas id="c2"></canvas>
+    <p>Headlights on wet pavement, reflections dragging down the lane, rain and beading on the windshield, wiper arc.</p>
+  </div>
+
+  <div class="shot">
+    <h2>Dusk · high plains, storm to the north</h2>
+    <canvas id="c3"></canvas>
+    <p>The last of the light under a storm shelf, power lines running to the horizon, dust on the glass.</p>
+  </div>
+
+  <div class="row">
+    <a class="btn" href="./">Back to the game</a>
+    <button id="again" type="button">Redraw</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const parse = c => c[0] === "#"
+    ? [parseInt(c.slice(1,3),16), parseInt(c.slice(3,5),16), parseInt(c.slice(5,7),16)]
+    : (c.match(/-?\d+/g) || [0,0,0]).slice(0,3).map(Number);
+  const mix = (a, b, t) => {
+    const [r1,g1,b1] = parse(a), [r2,g2,b2] = parse(b);
+    return `rgb(${Math.round(lerp(r1,r2,t))},${Math.round(lerp(g1,g2,t))},${Math.round(lerp(b1,b2,t))})`;
+  };
+  const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+  const SEG = 200, ROAD_W = 2000, CAM_D = 0.86, CAM_H = 1150, DRAW = 300;
+  const curveAt = i => (Math.sin(i / 190) * 2.2 + Math.sin(i / 71) * 1.1 + (hash(i >> 7) - 0.5) * 1.2) * 0.1;
+  const hillAt = i => Math.sin(i / 150) * 2200 + Math.sin(i / 47) * 520 + Math.sin(i / 19) * 90;
+
+  function scene(canvas, opt) {
+    const ctx = canvas.getContext("2d");
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const { sky, ground, light, sun, weather, plant, camZ } = opt;
+    const horizon = h * 0.42;
+
+    // ---------- sky ----------
+    const g = ctx.createLinearGradient(0, 0, 0, horizon + h * 0.1);
+    sky.forEach((c, i) => g.addColorStop(i / (sky.length - 1), c));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, horizon + h * 0.11);
+
+    if (opt.stars) {
+      for (let i = 0; i < 160; i++) {
+        const sx = hash(i * 3.1) * w, sy = hash(i * 7.3) * horizon * 0.95;
+        ctx.globalAlpha = 0.15 + hash(i * 11.7) * 0.7;
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(sx, sy, hash(i) > 0.9 ? 2 : 1.2, hash(i) > 0.9 ? 2 : 1.2);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---------- storm shelf / cloud bank ----------
+    if (opt.clouds) {
+      for (let i = 0; i < 22; i++) {
+        const seed = i * 5.9;
+        const cx = hash(seed) * w * 1.3 - w * 0.15;
+        const cy = horizon * (0.1 + hash(seed * 2) * (opt.storm ? 0.42 : 0.6));
+        const cw = w * (0.12 + hash(seed * 3) * 0.28), ch = horizon * (0.03 + hash(seed * 4) * 0.05);
+        ctx.globalAlpha = opt.storm ? 0.3 + hash(seed * 6) * 0.35 : 0.1 + hash(seed * 6) * 0.18;
+        ctx.fillStyle = opt.storm
+          ? mix("#2b3038", opt.sunTint || "#ffffff", hash(seed * 8) * 0.35)
+          : mix("#ffffff", opt.sunTint || "#ffffff", 0.5);
+        ctx.beginPath(); ctx.ellipse(cx, cy, cw, ch, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // ---------- sun with bloom ----------
+    if (sun) {
+      const glow = ctx.createRadialGradient(sun.x * w, sun.y * h, 2, sun.x * w, sun.y * h, h * 0.55);
+      glow.addColorStop(0, sun.core);
+      glow.addColorStop(0.08, sun.core);
+      glow.addColorStop(0.3, sun.halo);
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, w, horizon + h * 0.12);
+      ctx.fillStyle = sun.core;
+      ctx.beginPath(); ctx.arc(sun.x * w, sun.y * h, h * 0.034, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // ---------- ridges, three deep, each hazier ----------
+    for (let layer = 2; layer >= 0; layer--) {
+      const haze = 0.66 - layer * 0.18;
+      const col = mix(mix("#0a0d16", ground, 0.28 + light * 0.72), sky[sky.length - 1], haze);
+      ctx.fillStyle = col;
+      const span = 170 + layer * 130, drift = (camZ / (1500 + layer * 1900)) % span;
+      ctx.beginPath(); ctx.moveTo(-span, horizon + 3);
+      for (let i = -1; i < Math.ceil(w / span) + 2; i++) {
+        const bx = i * span - drift, seed = i + layer * 41;
+        const bh = (16 + layer * 15 + hash(seed) * 50) * (opt.tall || 1) * (1 - layer * 0.1);
+        const sh = 0.28 + hash(seed * 1.7) * 0.42;
+        ctx.lineTo(bx, horizon + 3);
+        ctx.lineTo(bx + span * sh, horizon - bh);
+        ctx.lineTo(bx + span * (sh + 0.2), horizon - bh * (0.55 + hash(seed * 2.3) * 0.35));
+        ctx.lineTo(bx + span, horizon + 3);
+      }
+      ctx.lineTo(w + span, horizon + 3); ctx.closePath(); ctx.fill();
+      // a lit face on the near ridge, where the sun is
+      if (layer === 0 && sun) {
+        ctx.globalAlpha = 0.16;
+        ctx.fillStyle = sun.halo;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // ---------- ground ----------
+    const gg = ctx.createLinearGradient(0, horizon, 0, h);
+    gg.addColorStop(0, mix(mix("#0a0d14", ground, 0.35 + light * 0.65), sky[sky.length - 1], 0.45));
+    gg.addColorStop(0.35, mix("#0a0d14", ground, 0.4 + light * 0.6));
+    gg.addColorStop(1, mix("#0a0d14", mix(ground, "#000000", 0.18), 0.45 + light * 0.55));
+    ctx.fillStyle = gg; ctx.fillRect(0, horizon, w, h - horizon);
+
+    // speckle: thousands of grains, denser and larger toward the camera
+    for (let i = 0; i < 2600; i++) {
+      const t = hash(i * 1.7);
+      const y = horizon + Math.pow(t, 2.1) * (h - horizon);
+      const x = hash(i * 3.3) * w;
+      const size = 0.5 + (y - horizon) / (h - horizon) * 2.6;
+      ctx.globalAlpha = 0.05 + hash(i * 5.1) * 0.16;
+      ctx.fillStyle = hash(i * 7.7) > 0.5 ? "#ffffff" : "#000000";
+      ctx.fillRect(x, y, size, size * 0.7);
+    }
+    ctx.globalAlpha = 1;
+
+    // ---------- the road ----------
+    const project = (p, camY) => {
+      const scale = CAM_D / Math.max(1, p.z - camZ);
+      p.sx = w / 2 + scale * p.x * w / 2;
+      p.sy = h / 2 - scale * (p.y - camY) * h / 2;
+      p.sw = scale * ROAD_W * w / 2;
+      return p;
+    };
+    const poly = (x1,y1,w1,x2,y2,w2,c) => {
+      ctx.fillStyle = c; ctx.beginPath();
+      ctx.moveTo(x1-w1,y1); ctx.lineTo(x2-w2,y2); ctx.lineTo(x2+w2,y2); ctx.lineTo(x1+w1,y1);
+      ctx.closePath(); ctx.fill();
+    };
+    const baseSeg = Math.floor(camZ / SEG);
+    const camY = CAM_H + hillAt(baseSeg);
+    const gl = 0.42 + light * 0.58;
+    const asphaltBase = opt.wet ? mix("#0a0d14", "#3a3f48", gl) : mix("#0a0d14", "#4a4c52", gl);
+    const laneCol = mix("#0a0d14", "#ddd0a2", gl);
+    const shoulder = mix("#0a0d14", mix(ground, "#cfc5b2", 0.45), gl);
+    let x = 0, dx = 0, maxY = h;
+    const drawn = [];
+    for (let n = 0; n < DRAW; n++) {
+      const i = baseSeg + n;
+      const p1 = project({ x, y: hillAt(i), z: i * SEG }, camY);
+      dx += curveAt(i); x += dx;
+      const p2 = project({ x, y: hillAt(i + 1), z: (i + 1) * SEG }, camY);
+      if (p2.sy >= maxY) continue;
+      maxY = p2.sy;
+      const even = Math.floor(i / 6) % 2 === 0;
+      const gTone = hash(i * 0.91);
+      poly(p1.sx, p1.sy, p1.sw * 1.45, p2.sx, p2.sy, p2.sw * 1.45, shoulder);
+      const patch = hash(i * 3.77);
+      let asph = patch > 0.93 ? mix(asphaltBase, "#000000", 0.3)
+               : patch < 0.07 ? mix(asphaltBase, "#ffffff", 0.08)
+               : (even ? asphaltBase : mix(asphaltBase, "#000000", 0.05));
+      poly(p1.sx, p1.sy, p1.sw * 1.12, p2.sx, p2.sy, p2.sw * 1.12, mix(asph, "#b8b2a4", even ? 0.55 : 0.2));
+      poly(p1.sx, p1.sy, p1.sw, p2.sx, p2.sy, p2.sw, asph);
+      poly(p1.sx - p1.sw * 0.46, p1.sy, p1.sw * 0.18, p2.sx - p2.sw * 0.46, p2.sy, p2.sw * 0.18, mix(asph, "#ffffff", 0.06));
+      poly(p1.sx + p1.sw * 0.46, p1.sy, p1.sw * 0.18, p2.sx + p2.sw * 0.46, p2.sy, p2.sw * 0.18, mix(asph, "#ffffff", 0.06));
+      poly(p1.sx, p1.sy, p1.sw * 0.1, p2.sx, p2.sy, p2.sw * 0.1, mix(asph, "#000000", 0.12));   // centre oil strip
+      if (i % 9 === 0) poly(p1.sx, p1.sy, p1.sw, p2.sx, p2.sy, p2.sw * 0.99, mix(asph, "#000000", 0.22));
+      if (even) poly(p1.sx, p1.sy, p1.sw * 0.028, p2.sx, p2.sy, p2.sw * 0.028,
+                     hash(i * 5.3) > 0.8 ? mix(laneCol, asph, 0.55) : laneCol);
+      poly(p1.sx + p1.sw * 0.93, p1.sy, p1.sw * 0.022, p2.sx + p2.sw * 0.93, p2.sy, p2.sw * 0.022, laneCol);
+      poly(p1.sx - p1.sw * 0.93, p1.sy, p1.sw * 0.022, p2.sx - p2.sw * 0.93, p2.sy, p2.sw * 0.022, laneCol);
+      drawn.push({ i, p: p1 });
+    }
+
+    // ---------- roadside, with shadows ----------
+    for (let k = drawn.length - 1; k >= 0; k--) {
+      const { i, p } = drawn[k];
+      if (hash(i * 1.37) < 0.82) {
+        if (i % 24 === 0) marker(ctx, p.sx + p.sw * 1.2, p.sy, p.sw / 42, light);
+        continue;
+      }
+      const side = hash(i * 3.11) > 0.5 ? 1 : -1;
+      const off = 1.4 + hash(i * 5.19) * 2.8;
+      const sx = p.sx + p.sw * off * side, s = p.sw / 42;
+      if (s < 0.25) continue;
+      const kind = plant[Math.floor(hash(i * 7.77) * plant.length)];
+      // cast shadow away from the sun
+      if (sun && light > 0.25) {
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.ellipse(sx + s * 6 * (sun.x > 0.5 ? -1 : 1), p.sy, s * 7, s * 1.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      sprite(ctx, kind, sx, p.sy, s, light, opt);
+    }
+
+    // ---------- haze / weather between you and the horizon ----------
+    const hazeCol = weather === "rain" ? "#4d5560" : weather === "dust" ? "#c89b62" : sky[sky.length - 1];
+    const fg = ctx.createLinearGradient(0, horizon - 14, 0, horizon + h * 0.32);
+    fg.addColorStop(0, hazeCol); fg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.globalAlpha = weather === "rain" ? 0.6 : weather === "dust" ? 0.62 : 0.42;
+    ctx.fillStyle = fg; ctx.fillRect(0, horizon - 16, w, h * 0.36);
+    ctx.globalAlpha = 1;
+
+    // heat shimmer just above the asphalt
+    if (opt.shimmer) {
+      for (let i = 0; i < 26; i++) {
+        const y = horizon + 6 + i * 1.6;
+        ctx.globalAlpha = 0.05 - i * 0.0015;
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(w * 0.2 + Math.sin(i) * 12, y, w * 0.6, 1.2);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---------- headlights and wet reflections ----------
+    if (opt.headlights) {
+      const beam = ctx.createLinearGradient(0, h, 0, horizon + h * 0.03);
+      beam.addColorStop(0, "rgba(255,238,200,0.34)");
+      beam.addColorStop(1, "rgba(255,238,200,0)");
+      ctx.fillStyle = beam;
+      ctx.beginPath();
+      ctx.moveTo(0, h); ctx.lineTo(w * 0.42, horizon + h * 0.05);
+      ctx.lineTo(w * 0.58, horizon + h * 0.05); ctx.lineTo(w, h);
+      ctx.closePath(); ctx.fill();
+    }
+    if (opt.wet) {
+      ctx.globalAlpha = 0.5;
+      for (let i = 0; i < 26; i++) {
+        const t = hash(i * 9.1);
+        const y = horizon + Math.pow(t, 1.6) * (h - horizon);
+        const len = (y - horizon) / (h - horizon) * h * 0.16 + 4;
+        const cx = w * 0.5 + (hash(i * 4.4) - 0.5) * w * 0.5 * ((y - horizon) / (h - horizon) + 0.25);
+        const grad = ctx.createLinearGradient(cx, y, cx, y + len);
+        grad.addColorStop(0, "rgba(255,230,180,0.5)");
+        grad.addColorStop(1, "rgba(255,230,180,0)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(cx - 1.6, y, 3.2, len);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---------- the cab ----------
+    cab(ctx, w, h, opt);
+
+    // ---------- film grain, vignette, a touch of aberration ----------
+    for (let i = 0; i < 2400; i++) {
+      ctx.globalAlpha = 0.03 + hash(i * 2.9) * 0.05;
+      ctx.fillStyle = hash(i * 6.1) > 0.5 ? "#fff" : "#000";
+      ctx.fillRect(hash(i * 1.3) * w, hash(i * 3.7) * h, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+    const vig = ctx.createRadialGradient(w / 2, h * 0.52, h * 0.22, w / 2, h * 0.52, h * 0.95);
+    vig.addColorStop(0, "rgba(0,0,0,0)");
+    vig.addColorStop(1, opt.headlights ? "rgba(0,0,0,0.72)" : "rgba(0,0,0,0.45)");
+    ctx.fillStyle = vig; ctx.fillRect(0, 0, w, h);
+  }
+
+  function marker(ctx, x, y, s, light) {
+    if (s < 0.3) return;
+    ctx.fillStyle = mix("#0a0d14", "#1d6b3c", 0.4 + light * 0.6);
+    ctx.fillRect(x - s * 1.2, y - s * 5, s * 2.4, s * 3.4);
+  }
+
+  function sprite(ctx, kind, x, y, s, light, opt) {
+    const dim = c => mix("#0a0d14", c, 0.4 + light * 0.6);
+    ctx.save(); ctx.translate(x, y);
+    if (kind === "saguaro") {
+      ctx.fillStyle = dim("#4a6b40");
+      ctx.fillRect(-s * 0.55, -s * 10, s * 1.1, s * 10);
+      ctx.fillRect(-s * 3.2, -s * 7, s * 2.7, s * 1.1);
+      ctx.fillRect(-s * 3.2, -s * 7, s * 1.1, s * 3.6);
+      ctx.fillRect(s * 0.5, -s * 8, s * 2.7, s * 1.1);
+      ctx.fillRect(s * 2.1, -s * 8, s * 1.1, s * 4.6);
+      ctx.fillStyle = dim("#5f8353");           // sunlit edge
+      ctx.fillRect(-s * 0.55, -s * 10, s * 0.35, s * 10);
+    } else if (kind === "pine") {
+      for (const [ww, hh, o] of [[4.4, 6.4, 0], [3.5, 5.2, 3.2], [2.5, 4.2, 6]]) {
+        ctx.fillStyle = dim(o ? "#31513a" : "#274531");
+        ctx.beginPath();
+        ctx.moveTo(0, -s * (hh + o)); ctx.lineTo(s * ww, -s * o); ctx.lineTo(-s * ww, -s * o);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = dim("#3a2d22"); ctx.fillRect(-s * 0.6, -s * 1.4, s * 1.2, s * 1.4);
+    } else if (kind === "pole") {
+      ctx.fillStyle = dim("#585349");
+      ctx.fillRect(-s * 0.45, -s * 17, s * 0.9, s * 17);
+      ctx.fillRect(-s * 3, -s * 16, s * 6, s * 0.8);
+      ctx.fillRect(-s * 2.4, -s * 14, s * 4.8, s * 0.6);
+      ctx.strokeStyle = dim("#2a2a2a"); ctx.lineWidth = Math.max(0.5, s * 0.16);
+      ctx.beginPath(); ctx.moveTo(-s * 2.6, -s * 15.4); ctx.quadraticCurveTo(s * 20, -s * 12, s * 44, -s * 15.4); ctx.stroke();
+    } else if (kind === "wreck") {
+      ctx.fillStyle = dim("#585d56");
+      ctx.fillRect(-s * 5, -s * 3.4, s * 10, s * 2.4);
+      ctx.fillRect(-s * 2.6, -s * 5.4, s * 5.2, s * 2.2);
+      ctx.fillStyle = dim("#1d2126");
+      ctx.fillRect(-s * 3.8, -s * 1.2, s * 2, s * 1.2);
+      ctx.fillRect(s * 1.8, -s * 1.2, s * 2, s * 1.2);
+      ctx.fillStyle = dim("#7a4a33");           // rust
+      ctx.fillRect(-s * 5, -s * 2.2, s * 10, s * 0.6);
+    } else if (kind === "sign") {
+      ctx.fillStyle = dim("#6b7079");
+      ctx.fillRect(-s * 0.45, -s * 10, s * 0.9, s * 10);
+      ctx.fillStyle = dim("#1d6b3c");
+      ctx.fillRect(-s * 5.5, -s * 15.5, s * 11, s * 5.8);
+      ctx.strokeStyle = dim("#eef3ee"); ctx.lineWidth = Math.max(0.6, s * 0.42);
+      ctx.strokeRect(-s * 4.9, -s * 14.9, s * 9.8, s * 4.6);
+    } else {
+      ctx.fillStyle = dim("#7d7f4a");
+      ctx.beginPath(); ctx.ellipse(0, -s * 1.4, s * 2.2, s * 1.4, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function cab(ctx, w, h, opt) {
+    const dashTop = h * 0.74;
+    // dirty glass
+    if (opt.grime) {
+      const gr = ctx.createLinearGradient(0, 0, 0, dashTop);
+      gr.addColorStop(0, `rgba(150,130,96,${opt.grime * 0.16})`);
+      gr.addColorStop(0.7, `rgba(150,130,96,${opt.grime * 0.3})`);
+      gr.addColorStop(1, `rgba(120,104,78,${opt.grime * 0.42})`);
+      ctx.fillStyle = gr; ctx.fillRect(0, 0, w, dashTop);
+      for (let i = 0; i < 90; i++) {       // bug strikes and smears
+        ctx.globalAlpha = 0.05 + hash(i * 4.2) * 0.12;
+        ctx.fillStyle = "#cbbfa0";
+        const bx = hash(i * 2.2) * w, by = hash(i * 6.6) * dashTop * 0.9;
+        ctx.beginPath(); ctx.ellipse(bx, by, 1 + hash(i) * 2.4, 0.8 + hash(i * 3) * 1.4, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    if (opt.rainOnGlass) {
+      for (let i = 0; i < 90; i++) {
+        const bx = hash(i * 1.9) * w, by = hash(i * 5.3) * dashTop;
+        const r = 1.2 + hash(i * 7.1) * 3.4;
+        const gr = ctx.createRadialGradient(bx - r * 0.3, by - r * 0.3, 0.2, bx, by, r);
+        gr.addColorStop(0, "rgba(255,255,255,0.5)");
+        gr.addColorStop(0.6, "rgba(190,210,235,0.28)");
+        gr.addColorStop(1, "rgba(190,210,235,0.05)");
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+        if (hash(i * 9.4) > 0.75) {        // a drop that has started to run
+          ctx.fillStyle = "rgba(200,220,240,0.18)";
+          ctx.fillRect(bx - 0.7, by, 1.4, 6 + hash(i * 2.7) * 20);
+        }
+      }
+      // wiper streak
+      ctx.save();
+      ctx.translate(w * 0.36, h * 0.95);
+      ctx.rotate(-Math.PI / 2 + 0.5);
+      const st = ctx.createLinearGradient(0, -6, 0, 6);
+      st.addColorStop(0, "rgba(255,255,255,0)");
+      st.addColorStop(0.5, "rgba(255,255,255,0.1)");
+      st.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = st; ctx.fillRect(0, -7, h * 0.72, 14);
+      ctx.fillStyle = "rgba(14,16,20,0.9)";
+      ctx.fillRect(0, -2.5, h * 0.66, 5);
+      ctx.restore();
+    }
+
+    // pillars and roof
+    ctx.fillStyle = "#12141a";
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(w*0.075,0); ctx.lineTo(0,h*0.34); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(w,0); ctx.lineTo(w*0.925,0); ctx.lineTo(w,h*0.34); ctx.closePath(); ctx.fill();
+    const roof = ctx.createLinearGradient(0, 0, 0, h * 0.06);
+    roof.addColorStop(0, "#0c0e12"); roof.addColorStop(1, "#191c23");
+    ctx.fillStyle = roof; ctx.fillRect(0, 0, w, h * 0.05);
+
+    // mirror
+    const mw = w * 0.19, mx = w * 0.5 - mw / 2, my = h * 0.05;
+    ctx.fillStyle = "#1a1d24"; ctx.fillRect(mx, my, mw, h * 0.075);
+    ctx.fillStyle = opt.headlights ? "#0b0e16" : "#3d4753";
+    ctx.fillRect(mx + 3, my + 3, mw - 6, h * 0.075 - 6);
+    if (opt.headlights) {
+      ctx.fillStyle = "rgba(255,225,170,0.55)";
+      ctx.fillRect(mx + mw * 0.44, my + h * 0.032, 3, 3);
+      ctx.fillRect(mx + mw * 0.54, my + h * 0.032, 3, 3);
+    }
+
+    // dash
+    const dash = ctx.createLinearGradient(0, dashTop - h * 0.04, 0, h);
+    dash.addColorStop(0, "#22262f"); dash.addColorStop(0.35, "#171a21"); dash.addColorStop(1, "#0a0c10");
+    ctx.fillStyle = dash;
+    ctx.beginPath();
+    ctx.moveTo(0, dashTop + h * 0.03);
+    ctx.quadraticCurveTo(w * 0.5, dashTop - h * 0.05, w, dashTop + h * 0.03);
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+    // windshield reflection of the dash
+    ctx.globalAlpha = 0.07;
+    ctx.fillStyle = "#8fa0b5";
+    ctx.beginPath();
+    ctx.moveTo(w * 0.1, dashTop - h * 0.03);
+    ctx.quadraticCurveTo(w * 0.5, dashTop - h * 0.16, w * 0.9, dashTop - h * 0.03);
+    ctx.quadraticCurveTo(w * 0.5, dashTop - h * 0.06, w * 0.1, dashTop - h * 0.03);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // wheel
+    ctx.strokeStyle = "#15181e"; ctx.lineWidth = Math.max(12, w * 0.024);
+    ctx.beginPath(); ctx.arc(w * 0.5, h * 1.2, h * 0.36, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
+    ctx.strokeStyle = "rgba(120,110,95,0.25)"; ctx.lineWidth = 1.2;
+    for (let i = 0; i < 26; i++) {
+      const a = Math.PI * 1.2 + (Math.PI * 0.6) * (i / 25);
+      const rx = w * 0.5 + Math.cos(a) * h * 0.36, ry = h * 1.2 + Math.sin(a) * h * 0.36;
+      ctx.beginPath(); ctx.moveTo(rx, ry - 5); ctx.lineTo(rx, ry + 5); ctx.stroke();
+    }
+
+    // gauges
+    const gy = dashTop + h * 0.1, r = Math.min(h * 0.052, w * 0.052);
+    const gauge = (cx, rr, frac, label, warn) => {
+      const face = ctx.createRadialGradient(cx - rr * 0.3, gy - rr * 0.35, rr * 0.1, cx, gy, rr);
+      face.addColorStop(0, "#1b2029"); face.addColorStop(1, "#080a0e");
+      ctx.beginPath(); ctx.arc(cx, gy, rr, 0, Math.PI * 2); ctx.fillStyle = face; ctx.fill();
+      ctx.strokeStyle = "#333a47"; ctx.lineWidth = 2; ctx.stroke();
+      const a0 = Math.PI * 0.78, a1 = Math.PI * 2.22;
+      for (let i = 0; i <= 10; i++) {
+        const a = a0 + (a1 - a0) * (i / 10);
+        ctx.strokeStyle = i > 7 && warn ? "#c8442f" : "#4a5261";
+        ctx.lineWidth = i % 5 === 0 ? 2 : 1;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * rr * 0.84, gy + Math.sin(a) * rr * 0.84);
+        ctx.lineTo(cx + Math.cos(a) * rr * 0.68, gy + Math.sin(a) * rr * 0.68);
+        ctx.stroke();
+      }
+      const a = a0 + (a1 - a0) * frac;
+      ctx.strokeStyle = warn ? "#ff6a52" : "#e8b04b"; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.moveTo(cx, gy); ctx.lineTo(cx + Math.cos(a) * rr * 0.76, gy + Math.sin(a) * rr * 0.76); ctx.stroke();
+      ctx.fillStyle = "#e8b04b"; ctx.beginPath(); ctx.arc(cx, gy, rr * 0.08, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#6b7583"; ctx.font = `600 ${Math.round(rr * 0.4)}px Overpass, sans-serif`;
+      ctx.textAlign = "center"; ctx.fillText(label, cx, gy + rr * 1.5);
+    };
+    gauge(w * 0.5 - r * 3.3, r, 0.55, "MPH", false);
+    gauge(w * 0.5, r * 1.24, 0.55, "", false);
+    gauge(w * 0.5 + r * 3.3, r, opt.fuel ?? 0.6, "FUEL", (opt.fuel ?? 0.6) < 0.16);
+    gauge(w * 0.5 + r * 6, r * 0.78, opt.temp ?? 0.4, "TEMP", (opt.temp ?? 0.4) > 0.8);
+    ctx.fillStyle = "#e8eaee"; ctx.font = `700 ${Math.round(r * 0.9)}px Overpass, sans-serif`;
+    ctx.textAlign = "center"; ctx.fillText(String(opt.mph ?? 55), w * 0.5, gy + r * 0.3);
+    ctx.fillStyle = "#59626f"; ctx.font = `600 ${Math.round(r * 0.4)}px Overpass, sans-serif`;
+    ctx.fillText((opt.odo ?? 142783).toLocaleString() + " mi", w * 0.5, gy + r * 0.95);
+    // dash glow at night
+    if (opt.headlights) {
+      const gl = ctx.createRadialGradient(w * 0.5, gy, r * 0.5, w * 0.5, gy, r * 8);
+      gl.addColorStop(0, "rgba(232,176,75,0.12)"); gl.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = gl; ctx.fillRect(0, dashTop - h * 0.05, w, h * 0.35);
+    }
+  }
+
+  function drawAll() {
+    scene(document.getElementById("c1"), {
+      sky: ["#2f5f9c", "#6f9ac2", "#e7bc8a", "#f6c98a"],
+      ground: "#c98f5c", light: 0.72, tall: 0.9, camZ: 180000,
+      sun: { x: 0.74, y: 0.3, core: "#fff2c0", halo: "rgba(255,170,90,0.55)" },
+      sunTint: "#ffbb78", clouds: true, shimmer: true, plant: ["saguaro", "wreck", "sign", "pole", "scrub"],
+      grime: 0.55, fuel: 0.62, temp: 0.52, mph: 58, weather: "clear"
+    });
+    scene(document.getElementById("c2"), {
+      sky: ["#05070f", "#0a0f1e", "#141c2e"],
+      ground: "#3b4a3f", light: 0.1, tall: 1.5, camZ: 2600000,
+      stars: true, clouds: true, storm: false, plant: ["pine", "pine", "wreck", "sign", "pole"],
+      headlights: true, wet: true, rainOnGlass: true, grime: 0.3,
+      fuel: 0.14, temp: 0.46, mph: 44, weather: "rain"
+    });
+    scene(document.getElementById("c3"), {
+      sky: ["#1c2b4e", "#5b4a6e", "#c2643f", "#e89a55"],
+      ground: "#b9a45f", light: 0.34, tall: 0.5, camZ: 1200000,
+      sun: { x: 0.2, y: 0.38, core: "#ffd9a0", halo: "rgba(255,120,60,0.5)" },
+      sunTint: "#ff9152", clouds: true, storm: true, plant: ["pole", "barn", "wreck", "sign", "scrub"],
+      grime: 0.75, fuel: 0.4, temp: 0.44, mph: 61, weather: "dust"
+    });
+  }
+  drawAll();
+  document.getElementById("again").addEventListener("click", drawAll);
+  window.addEventListener("resize", drawAll);
+})();
+</script>
+</body>
+</html>
