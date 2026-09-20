@@ -3,6 +3,9 @@
 (() => {
   const C = window.OME_CONTENT;
   const MUS = window.OME_MUSIC;
+  // if the sync script is missing or blocked, the game plays on, locally
+  const SYNC = window.OME_SYNC || { enabled: false, group: "family",
+    load: async () => null, push: async () => {}, board: async () => [] };
   const $ = id => document.getElementById(id);
   const SAVE_KEY = "ome-save-v2";
   const ACCOUNT_KEY = "ome-account-v2";
@@ -103,6 +106,8 @@
 
   function beginRun() {
     const name = ($("travelerName").value || "").trim().slice(0, 18) || "Traveler";
+    store.set("ome-name", name);
+    pushProgress(true);
     const career = C.careers.find(c => c.id === pick.career);
     const v = C.vehicles.find(x => x.id === pick.vehicle);
     S = {
@@ -158,6 +163,7 @@
   }
 
   function launch() {
+    pushProgress(true);
     logLine(`Left Phoenix at ${clockText()} with $${Math.round(S.cash)} and ${fuelPct()}% of a tank. Boston is ${destMile()} miles away.`);
     show("travel");
     MUS.start(); syncMood();
@@ -218,7 +224,7 @@
       return openStop(due);
     }
     maybeEvent();
-    if (Math.random() < 0.004) syncMood();
+    if (Math.random() < 0.004) { syncMood(); pushProgress(); }
   }
 
   // ---------------------------------------------------------------- events
@@ -257,16 +263,18 @@
     for (const x of list) { roll -= (x.w || x.weight || 1); if (roll <= 0) return x; }
     return list[list.length - 1];
   };
+  // Encounters are paced by distance, not by frames, so speed never floods you.
   function maybeEvent() {
-    if (S.mile - (S.lastEventMile || -20) < 14) return;
-    if (Math.random() > 0.05) return;
+    if (!$("eventCard").hidden) return;
+    if (S.nextEventMile == null) S.nextEventMile = S.mile + 25 + Math.random() * 45;
+    if (S.mile < S.nextEventMile) return;
+    S.nextEventMile = S.mile + 30 + Math.random() * 50;
     const c = ctxNow();
     const pool = C.events.filter(e => eligible(e, c) && !(e.requires || {}).stopped && !(e.requires || {}).service);
     if (pool.length) fireEvent(pickWeighted(pool), c);
   }
   function fireEvent(ev, c) {
     S.seen[ev.id] = true;
-    S.lastEventMile = S.mile;
     S.events++;
     stopTravel();
     MUS.setMood(/414|BACK AGAIN|LIGHTS BEHIND|ROAD IS CLOSED|SOMETHING IN THE ROAD/.test(ev.title) ? "danger" : moodNow());
@@ -380,6 +388,7 @@
     if (n.kind === "settlement") {
       MUS.setMood("settlement");
       saveCheckpoint(n);
+      pushProgress(true);
       if (n.mile > 1500) award("halfway");
       if (S.fuelGal < 1) award("thrifty");
     }
@@ -490,7 +499,11 @@
 
     const c = ctxNow({ stopped: true, services: n.services });
     const pool = C.events.filter(e => eligible(e, c) && ((e.requires || {}).stopped || (e.requires || {}).service));
-    if (pool.length && Math.random() < 0.5) setTimeout(() => fireEvent(pickWeighted(pool), c), 400);
+    const townGap = S.mile - (S.lastTownEventMile || -200);
+    if (pool.length && townGap > 120 && Math.random() < 0.45) {
+      S.lastTownEventMile = S.mile;
+      setTimeout(() => { if ($("eventCard").hidden) fireEvent(pickWeighted(pool), c); }, 500);
+    }
     save(); hud();
   }
   const refreshStop = n => openStop(n);
@@ -644,6 +657,7 @@
     account.travelerLevel = 1 + Math.floor(account.xp / 800);
     award("arrived");
     saveAccount();
+    pushProgress(true);
     summary(true, "BOSTON",
       "You come around the last bend and the harbor is there, and the lights are on, all of them, all at once, for no reason other than that they can be.");
   }
@@ -656,6 +670,7 @@
     account.memorials.push({ name: S.name, miles: Math.round(S.mile), cause: title,
       spent: Math.round(S.spent), when: new Date().toLocaleDateString() });
     saveAccount();
+    pushProgress(true);
     summary(false, title, text);
   }
   function summary(ok, title, text) {
@@ -709,7 +724,23 @@
     $("hudNext").textContent = nn ? `${nn.name} in ${Math.max(0, Math.round(nn.mile - S.mile))} mi` : "";
   }
 
-  let scroll = 0;
+  let scroll = 0, weather = { kind: "clear", until: 0 }, glint = null;
+
+  // Weather rolls over slowly and belongs to the region and the hour.
+  function weatherNow() {
+    if (!S) return "clear";
+    if (S.mile > weather.until) {
+      weather.until = S.mile + 60 + Math.random() * 160;
+      const r = region(), roll = Math.random();
+      weather.kind = r === "desert" || r === "mesa" ? (roll < 0.12 ? "dust" : "clear")
+        : r === "plains" ? (roll < 0.2 ? "rain" : roll < 0.28 ? "wind" : "clear")
+        : r === "farm" ? (roll < 0.26 ? "rain" : "clear")
+        : r === "rust" || r === "hills" ? (roll < 0.22 ? "rain" : roll < 0.3 ? "fog" : "clear")
+        : (roll < 0.2 ? "rain" : roll < 0.3 ? "snow" : "clear");
+    }
+    return weather.kind;
+  }
+
   function draw(dt) {
     const c = $("road"), ctx = c.getContext("2d");
     const dpr = window.devicePixelRatio || 1;
@@ -718,67 +749,233 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const R = S ? regionInfo() : C.regions.desert;
     const night = S ? isNight() : false;
-    scroll += travelling ? dt * (S && S.onFoot ? 22 : 240) * Math.min(speed, 4) : 0;
+    const wx = S ? weatherNow() : "clear";
+    const moving = travelling ? dt * (S && S.onFoot ? 22 : 235) * Math.min(speed, 4) : 0;
+    scroll += moving;
 
+    // ---- sky, sun and moon ----
+    const hour = S ? (S.minutes % (24 * 60)) / 60 : 12;
+    const dusk = !night && (hour < 7.5 || hour > 17.5);
     const sky = ctx.createLinearGradient(0, 0, 0, h);
-    if (night) { sky.addColorStop(0, "#080c1c"); sky.addColorStop(1, "#1b2138"); }
+    if (night) { sky.addColorStop(0, "#070a18"); sky.addColorStop(0.7, "#131a2f"); sky.addColorStop(1, "#1e2540"); }
+    else if (dusk) { sky.addColorStop(0, "#2d4a76"); sky.addColorStop(0.55, "#b8703f"); sky.addColorStop(1, "#e8b06a"); }
     else { sky.addColorStop(0, R.sky[0]); sky.addColorStop(1, R.sky[1]); }
     ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
-    if (night) {
-      ctx.fillStyle = "#fff";
-      for (let i = 0; i < 46; i++) {
-        ctx.globalAlpha = 0.25 + ((i * 7) % 10) / 22;
-        ctx.fillRect((i * 97) % w, (i * 53) % (h * 0.5), 1.5, 1.5);
-      }
-      ctx.globalAlpha = 1;
-    }
 
     const horizon = h * 0.62;
-    ctx.fillStyle = night ? "#12162a" : shade(R.ground, -0.35);
+    const arc = clamp((hour - 6) / 12, -0.2, 1.2);
+    const bodyX = w * (0.12 + arc * 0.76);
+    const bodyY = horizon - Math.sin(Math.max(0, arc) * Math.PI) * (h * 0.42) - 6;
+    if (night) {
+      ctx.fillStyle = "#fff";
+      for (let i = 0; i < 60; i++) {
+        ctx.globalAlpha = 0.22 + ((i * 7) % 12) / 26;
+        ctx.fillRect((i * 83) % w, (i * 47) % (h * 0.55), 1.6, 1.6);
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#e8eaf2";
+      ctx.beginPath(); ctx.arc(w * 0.76, h * 0.18, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = night ? "#131a2f" : "#000";
+      ctx.beginPath(); ctx.arc(w * 0.76 + 7, h * 0.18 - 5, 14, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.fillStyle = dusk ? "#ffd7a0" : "#fff6d8";
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.arc(bodyX, bodyY, dusk ? 20 : 15, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    if (wx === "fog") { ctx.fillStyle = "rgba(190,200,205,0.28)"; ctx.fillRect(0, 0, w, h); }
+
+    // ---- far ridgeline ----
+    ctx.fillStyle = night ? "#101527" : shade(R.ground, -0.42);
     for (let i = -1; i < 9; i++) {
-      const bx = (i * 230) - (scroll * 0.1) % 230;
-      const bh = R.plant === "pine" ? 70 + ((i * 41) % 60) : 34 + ((i * 37) % 46);
+      const bx = (i * 230) - (scroll * 0.07) % 230;
+      const bh = R.plant === "pine" ? 74 + ((i * 41) % 58) : 34 + ((i * 37) % 46);
       ctx.beginPath();
-      ctx.moveTo(bx, horizon);
-      ctx.lineTo(bx + 70, horizon - bh);
-      ctx.lineTo(bx + 130, horizon - bh * 0.55);
-      ctx.lineTo(bx + 200, horizon);
+      ctx.moveTo(bx, horizon); ctx.lineTo(bx + 70, horizon - bh);
+      ctx.lineTo(bx + 132, horizon - bh * 0.55); ctx.lineTo(bx + 205, horizon);
       ctx.closePath(); ctx.fill();
     }
-    ctx.fillStyle = night ? "#171a26" : R.ground;
-    ctx.fillRect(0, horizon, w, h - horizon);
 
-    for (let i = -1; i < 11; i++) {
-      const x = (i * 150) - (scroll * 0.5) % 150;
-      const y = horizon + 8 + ((i * 29) % 12);
-      ctx.fillStyle = night ? "#0d1018" : plantColor(R.plant);
+    // ---- ground ----
+    const g = ctx.createLinearGradient(0, horizon, 0, h);
+    g.addColorStop(0, night ? "#161a28" : shade(R.ground, -0.12));
+    g.addColorStop(1, night ? "#101320" : shade(R.ground, 0.06));
+    ctx.fillStyle = g; ctx.fillRect(0, horizon, w, h - horizon);
+
+    // ---- power lines marching along the highway ----
+    ctx.strokeStyle = night ? "#0d1017" : "rgba(40,45,50,0.55)";
+    ctx.lineWidth = 1.5;
+    const poleGap = 210, poleY = horizon + 4;
+    for (let i = -1; i < 7; i++) {
+      const x = (i * poleGap) - (scroll * 0.34) % poleGap;
+      ctx.fillStyle = night ? "#0d1017" : "#4a4f47";
+      ctx.fillRect(x, poleY - 62, 3.5, 62);
+      ctx.fillRect(x - 9, poleY - 58, 21, 3);
+      ctx.beginPath();
+      ctx.moveTo(x - 8, poleY - 55);
+      ctx.quadraticCurveTo(x + poleGap / 2, poleY - 44, x + poleGap - 8, poleY - 55);
+      ctx.stroke();
+    }
+
+    // ---- roadside growth ----
+    for (let i = -1; i < 12; i++) {
+      const x = (i * 140) - (scroll * 0.52) % 140;
+      const y = horizon + 14 + ((i * 29) % 14);
+      ctx.fillStyle = night ? "#0c0f18" : plantColor(R.plant);
       drawPlant(ctx, R.plant, x, y);
     }
-    // the occasional dead vehicle, because this is the world now
+
+    // ---- the occasional dead vehicle ----
     for (let i = -1; i < 4; i++) {
-      const x = (i * 620) - (scroll * 0.5) % 620;
-      const y = horizon + 26;
-      ctx.fillStyle = night ? "#0c0f16" : "#575d55";
-      ctx.fillRect(x, y - 9, 30, 8);
-      ctx.fillRect(x + 7, y - 14, 14, 6);
-      ctx.fillStyle = night ? "#0a0c12" : "#3b3f3a";
-      ctx.fillRect(x + 3, y - 2, 6, 3); ctx.fillRect(x + 21, y - 2, 6, 3);
+      const x = (i * 640) - (scroll * 0.52) % 640;
+      const y = horizon + 34;
+      ctx.fillStyle = night ? "#0b0e15" : "#5a6058";
+      ctx.fillRect(x, y - 9, 32, 8);
+      ctx.fillRect(x + 7, y - 14, 15, 6);
+      ctx.fillStyle = night ? "#090b11" : "#3a3e38";
+      ctx.fillRect(x + 3, y - 2, 6, 3); ctx.fillRect(x + 22, y - 2, 6, 3);
     }
 
-    const roadTop = h * 0.72;
-    ctx.fillStyle = night ? "#191b23" : "#43454c";
+    // ---- the road, guardrail, mile markers and signs ----
+    const roadTop = h * 0.7;
+    ctx.fillStyle = night ? "#181a22" : "#41434a";
     ctx.fillRect(0, roadTop, w, h - roadTop);
-    ctx.fillStyle = night ? "#2b2f3a" : "#5d6069";
+    ctx.fillStyle = night ? "#242833" : "#5b5e67";
     ctx.fillRect(0, roadTop, w, 3);
-    ctx.fillStyle = night ? "#6f6a4e" : "#e7dcb4";
-    const dash = 46, gap = 36, y = h * 0.86;
-    for (let x = -((scroll * 1.5) % (dash + gap)); x < w; x += dash + gap) ctx.fillRect(x, y, dash, 5);
+    ctx.fillStyle = night ? "#3a3f4b" : "#6d7178";      // guardrail
+    for (let i = -1; i < 26; i++) {
+      const x = (i * 46) - (scroll * 0.8) % 46;
+      ctx.fillRect(x, roadTop - 13, 3, 13);
+    }
+    ctx.fillRect(0, roadTop - 15, w, 4);
+    ctx.fillStyle = night ? "#6f6a4e" : "#e7dcb4";      // lane dashes and shoulder line
+    const dash = 48, gap = 38, laneY = h * 0.86;
+    for (let x = -((scroll * 1.5) % (dash + gap)); x < w; x += dash + gap) ctx.fillRect(x, laneY, dash, 5);
+    ctx.fillRect(0, h - 10, w, 3);
+
+    if (S) {
+      // green mile markers, counting the real mileage
+      const markerGap = 150;
+      for (let i = -1; i < 8; i++) {
+        const x = (i * markerGap) - (scroll * 1.0) % markerGap;
+        const mile = Math.max(0, Math.round(S.mile + (x - w * 0.42) / 24));
+        ctx.fillStyle = night ? "#123524" : "#1d6b3c";
+        ctx.fillRect(x, roadTop - 34, 15, 20);
+        ctx.fillStyle = "#eef3ee";
+        ctx.font = "700 9px Overpass, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(String(mile % 1000), x + 7.5, roadTop - 21);
+      }
+      // a big green sign for the next town, appearing as you approach it
+      const nn = nextNode(), away = nn.mile - S.mile;
+      if (away < 12 && away > 0.2) {
+        const sx = w * 0.62 + (away / 12) * w * 0.9;
+        if (sx < w + 160) {
+          ctx.fillStyle = night ? "#123524" : "#1d6b3c";
+          ctx.fillRect(sx, horizon - 46, 150, 46);
+          ctx.strokeStyle = "#eef3ee"; ctx.lineWidth = 2;
+          ctx.strokeRect(sx + 3, horizon - 43, 144, 40);
+          ctx.fillStyle = "#6b7079";
+          ctx.fillRect(sx + 22, horizon, 5, 34); ctx.fillRect(sx + 120, horizon, 5, 34);
+          ctx.fillStyle = "#eef3ee";
+          ctx.font = "700 15px Overpass, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(nn.name.slice(0, 15), sx + 75, horizon - 26);
+          ctx.font = "600 12px Overpass, sans-serif";
+          ctx.fillText(Math.max(1, Math.round(away)) + " MILES", sx + 75, horizon - 10);
+        }
+      }
+      // something worth stopping for, sitting on the shoulder
+      if (!S.onFoot && travelling && !glint && Math.random() < 0.0016) {
+        glint = { x: w + 40, y: roadTop - 22, taken: false };
+      }
+      if (glint) {
+        glint.x -= moving * 1.0;
+        if (glint.x < -60) glint = null;
+        else {
+          const pulse = 0.55 + Math.sin(performance.now() / 180) * 0.45;
+          ctx.fillStyle = `rgba(255,224,130,${pulse})`;
+          ctx.beginPath(); ctx.arc(glint.x, glint.y, 7, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.beginPath(); ctx.arc(glint.x, glint.y, 2.5, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
 
     if (S && S.onFoot) drawWalker(ctx, w * 0.42, h * 0.83, night);
-    else drawVehicle(ctx, w * 0.42, h * 0.8 + (travelling ? Math.sin(scroll / 18) * 1.2 : 0), night);
+    else drawVehicle(ctx, w * 0.42, h * 0.8 + (travelling ? Math.sin(scroll / 16) * 1.3 : 0), night);
+
+    // ---- weather over everything ----
+    if (wx === "rain" || wx === "snow") {
+      const n = wx === "rain" ? 90 : 60;
+      ctx.strokeStyle = wx === "rain" ? "rgba(190,210,235,0.45)" : "rgba(255,255,255,0.75)";
+      ctx.fillStyle = "rgba(255,255,255,0.8)";
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < n; i++) {
+        const sx = (i * 137 + scroll * (wx === "rain" ? 3.5 : 0.8)) % (w + 60) - 30;
+        const sy = (i * 71 + scroll * (wx === "rain" ? 6 : 1.4)) % h;
+        if (wx === "rain") { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - 5, sy + 14); ctx.stroke(); }
+        else { ctx.beginPath(); ctx.arc(sx, sy, 1.8, 0, Math.PI * 2); ctx.fill(); }
+      }
+      if (wx === "rain") { ctx.fillStyle = "rgba(20,30,45,0.2)"; ctx.fillRect(0, 0, w, h); }
+    } else if (wx === "dust") {
+      ctx.fillStyle = "rgba(205,150,90,0.22)"; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "rgba(225,180,120,0.3)";
+      for (let i = 0; i < 40; i++) {
+        const sx = (i * 191 + scroll * 4) % (w + 40) - 20, sy = horizon + (i * 37) % (h - horizon);
+        ctx.fillRect(sx, sy, 16, 1.5);
+      }
+    }
+    if (night) {                                        // vignette, so the dark feels dark
+      const v = ctx.createRadialGradient(w / 2, h * 0.7, h * 0.2, w / 2, h * 0.7, h);
+      v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,0.55)");
+      ctx.fillStyle = v; ctx.fillRect(0, 0, w, h);
+    }
+    // the weather gets a word, so the player knows why the road changed
+    if (S && wx !== "clear") {
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillRect(8, 8, 74, 22);
+      ctx.fillStyle = "#eef1ec";
+      ctx.font = "700 11px Overpass, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(wx.toUpperCase(), 16, 23);
+    }
   }
+
+  // tapping the glint pulls you over to look
+  $("road").addEventListener("click", e => {
+    if (!S || !glint || S.done) return;
+    const r = $("road").getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    if (Math.hypot(x - glint.x, y - glint.y) > 34) return;
+    glint = null;
+    stopTravel();
+    const finds = [
+      { item: "tape", text: "A half-used roll of duct tape in a toolbox nobody closed." },
+      { item: "oil", text: "Two quarts of oil, still sealed, under a seat." },
+      { item: "jerky", text: "A gas-station bag with jerky in it. The date is smudged." },
+      { item: "flashlight", text: "A flashlight. The batteries are even good." },
+      { item: "water", text: "Four bottles of water in a cooler, still cold-ish." },
+      { item: null, text: "Broken glass, a shoe, and a receipt from a gas station in a town you haven't reached yet." }
+    ];
+    const find = finds[Math.floor(Math.random() * finds.length)];
+    S.minutes += 12;
+    if (find.item && bulkUsed() + 1 <= cargoCap()) addItem(find.item);
+    else if (find.item) flash("No room to carry it.");
+    if (!find.item) account.anomaly += 1;
+    $("eventTitle").textContent = "ON THE SHOULDER";
+    $("eventText").textContent = "You pull over for something bright in the weeds.";
+    $("eventOutcome").textContent = find.text;
+    $("eventChoices").replaceChildren();
+    $("eventClose").hidden = false;
+    $("eventCard").hidden = false;
+    save();
+  });
+
   function plantColor(kind) {
-    return kind === "saguaro" ? "#4d7a43" : kind === "scrub" ? "#6b7a4a" : kind === "corn" ? "#9aa24e" : "#3d5c3a";
+    return kind === "saguaro" ? "#4d7a43" : kind === "scrub" ? "#6b7a4a"
+         : kind === "corn" ? "#9aa24e" : kind === "pole" ? "#4a4f47"
+         : kind === "stack" ? "#4e5257" : "#3d5c3a";
   }
   function drawPlant(ctx, kind, x, y) {
     if (kind === "saguaro") {
@@ -787,73 +984,108 @@
       ctx.fillRect(x + 7, y - 30, 10, 5); ctx.fillRect(x + 12, y - 30, 5, 18);
     } else if (kind === "scrub") {
       ctx.beginPath(); ctx.arc(x, y - 8, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 11, y - 5, 6, 0, Math.PI * 2); ctx.fill();
     } else if (kind === "pole") {
-      ctx.fillRect(x, y - 52, 4, 52);
-      ctx.fillRect(x - 10, y - 48, 24, 3);
+      ctx.beginPath(); ctx.arc(x, y - 6, 7, 0, Math.PI * 2); ctx.fill();
     } else if (kind === "corn") {
-      for (let i = 0; i < 5; i++) ctx.fillRect(x + i * 5, y - 16 - (i % 2) * 3, 3, 16);
+      for (let i = 0; i < 6; i++) ctx.fillRect(x + i * 5, y - 17 - (i % 2) * 3, 3, 17);
     } else if (kind === "stack") {
-      ctx.fillRect(x, y - 60, 9, 60);
-      ctx.fillRect(x + 16, y - 40, 7, 40);
+      ctx.fillRect(x, y - 20, 8, 20);
+      ctx.fillRect(x + 14, y - 13, 6, 13);
     } else {
       ctx.beginPath();
-      ctx.moveTo(x, y - 48); ctx.lineTo(x + 15, y); ctx.lineTo(x - 15, y);
+      ctx.moveTo(x, y - 46); ctx.lineTo(x + 15, y); ctx.lineTo(x - 15, y);
       ctx.closePath(); ctx.fill();
       ctx.fillRect(x - 2, y, 4, 6);
     }
   }
+
   function drawVehicle(ctx, x, y, night) {
     const v = S ? veh() : C.vehicles[0];
     const s = 1.5, moto = v.id === "moto";
+    const roll = scroll / 9;                       // wheels actually turn
     ctx.save(); ctx.translate(x, y);
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillStyle = "rgba(0,0,0,0.32)";
     ctx.beginPath(); ctx.ellipse(0, 26 * s, (moto ? 22 : 42) * s, 6 * s, 0, 0, Math.PI * 2); ctx.fill();
     const paint = { ranger: "#c8442f", civic: "#c8cdd2", voyager: "#7a8fa6", suburban: "#2f4a3a",
                     diesel: "#d9cba7", wagon: "#3f5d86", bronco: "#d8892f", moto: "#2b2f36" }[v.id] || "#b5563c";
+    const wheel = (wx, r) => {
+      ctx.fillStyle = "#15161c";
+      ctx.beginPath(); ctx.arc(wx * s, 20 * s, r * s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#666b77";
+      ctx.beginPath(); ctx.arc(wx * s, 20 * s, r * 0.42 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#2b2f3a"; ctx.lineWidth = 1.4;
+      for (let i = 0; i < 4; i++) {
+        const a = roll + (i * Math.PI) / 2;
+        ctx.beginPath();
+        ctx.moveTo(wx * s, 20 * s);
+        ctx.lineTo(wx * s + Math.cos(a) * r * 0.9 * s, 20 * s + Math.sin(a) * r * 0.9 * s);
+        ctx.stroke();
+      }
+    };
     if (moto) {
       ctx.fillStyle = paint;
       ctx.fillRect(-14 * s, 6 * s, 30 * s, 6 * s);
       ctx.fillRect(-4 * s, -4 * s, 12 * s, 10 * s);
-      ctx.fillStyle = "#1b1b22";
-      for (const wx of [-14, 16]) { ctx.beginPath(); ctx.arc(wx * s, 18 * s, 8 * s, 0, Math.PI * 2); ctx.fill(); }
+      wheel(-14, 8); wheel(16, 8);
     } else {
+      const cabW = v.cargo > 20 ? 46 : 34;
       ctx.fillStyle = paint;
       ctx.fillRect(-40 * s, 2 * s, 78 * s, 16 * s);
-      const cabW = v.cargo > 20 ? 46 : 34;
       ctx.fillRect(-14 * s, -12 * s, cabW * s, 16 * s);
-      ctx.fillStyle = shade(paint, -0.3);
+      ctx.fillStyle = shade(paint, -0.28);
       ctx.fillRect(-40 * s, 14 * s, 78 * s, 4 * s);
+      ctx.fillStyle = shade(paint, 0.25);                 // a highlight along the body
+      ctx.fillRect(-40 * s, 2 * s, 78 * s, 2 * s);
       ctx.fillStyle = night ? "#232b44" : "#a8d3e6";
       ctx.fillRect(-10 * s, -9 * s, 13 * s, 11 * s);
       ctx.fillRect(6 * s, -9 * s, (cabW - 20) * s, 11 * s);
-      ctx.fillStyle = "#1b1b22";
-      for (const wx of [-26, 24]) {
-        ctx.beginPath(); ctx.arc(wx * s, 20 * s, 7.5 * s, 0, Math.PI * 2); ctx.fill();
+      if (S && S.vehicle < 55) {                          // rough shape once it's beaten up
+        ctx.fillStyle = "rgba(20,20,25,0.45)";
+        ctx.fillRect(10 * s, 6 * s, 14 * s, 5 * s);
+        ctx.fillRect(-30 * s, 8 * s, 10 * s, 4 * s);
+      }
+      wheel(-26, 7.5); wheel(24, 7.5);
+    }
+    // exhaust and dust while moving
+    if (travelling) {
+      ctx.fillStyle = night ? "rgba(160,170,190,0.18)" : "rgba(120,110,100,0.22)";
+      for (let i = 0; i < 4; i++) {
+        const px = -46 * s - i * 14, py = 16 * s - Math.sin(scroll / 12 + i) * 4;
+        ctx.beginPath(); ctx.arc(px, py, 4 + i * 2.5, 0, Math.PI * 2); ctx.fill();
       }
     }
     if (night) {
-      const g = ctx.createLinearGradient(40 * s, 6 * s, 160 * s, 6 * s);
-      g.addColorStop(0, "rgba(255,240,190,0.45)"); g.addColorStop(1, "rgba(255,240,190,0)");
+      const g = ctx.createLinearGradient(40 * s, 6 * s, 170 * s, 6 * s);
+      g.addColorStop(0, "rgba(255,240,190,0.5)"); g.addColorStop(1, "rgba(255,240,190,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.moveTo(38 * s, 2 * s); ctx.lineTo(160 * s, -14 * s); ctx.lineTo(160 * s, 28 * s); ctx.lineTo(38 * s, 12 * s);
+      ctx.moveTo(38 * s, 2 * s); ctx.lineTo(170 * s, -16 * s); ctx.lineTo(170 * s, 30 * s); ctx.lineTo(38 * s, 12 * s);
       ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#ffe9b0";
+      ctx.fillRect(36 * s, 4 * s, 4 * s, 5 * s);
+      ctx.fillStyle = "#c8442f";
+      ctx.fillRect(-42 * s, 6 * s, 3 * s, 5 * s);
     }
     ctx.restore();
   }
+
   function drawWalker(ctx, x, y, night) {
-    const t = scroll / 10;
+    const t = scroll / 8;
     ctx.save(); ctx.translate(x, y);
     ctx.fillStyle = "rgba(0,0,0,0.3)";
     ctx.beginPath(); ctx.ellipse(0, 22, 14, 4, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = night ? "#2a3040" : "#3c4657";
-    ctx.beginPath(); ctx.arc(0, -22, 6, 0, Math.PI * 2); ctx.fill();   // head
-    ctx.fillRect(-5, -16, 10, 20);                                     // body
-    ctx.fillRect(4, -14, 8, 14);                                       // pack
-    ctx.fillRect(-5, 4, 4, 16 + Math.sin(t) * 3);                      // legs
+    ctx.beginPath(); ctx.arc(0, -22, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(-5, -16, 10, 20);
+    ctx.fillStyle = night ? "#20263a" : "#57503f";
+    ctx.fillRect(4, -14, 9, 15);                          // the pack
+    ctx.fillStyle = night ? "#2a3040" : "#3c4657";
+    ctx.fillRect(-5, 4, 4, 16 + Math.sin(t) * 3);
     ctx.fillRect(1, 4, 4, 16 - Math.sin(t) * 3);
     ctx.restore();
   }
+
   function shade(hex, amt) {
     if (!/^#/.test(hex)) return hex;
     const n = parseInt(hex.slice(1), 16);
@@ -899,6 +1131,71 @@
     renderCheckpoints();
   }
   const save = () => { if (S && !S.done) store.set(SAVE_KEY, S); };
+
+  // ---------------------------------------------------------------- travelers
+  const travelerName = () => (store.get("ome-name") || "").trim();
+  let pushTimer = null, lastPush = 0;
+  function pushProgress(force) {
+    if (!SYNC.enabled || !travelerName()) return;
+    const now = Date.now();
+    if (!force && now - lastPush < 60000) return;      // at most once a minute while driving
+    lastPush = now;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => {
+      SYNC.push(travelerName(), {
+        mile: S ? S.mile : 0,
+        day: S ? dayNum() : 1,
+        bestMile: account.bestMile,
+        arrivals: account.arrivals,
+        status: !S ? "resting" : S.done ? "finished" : S.onFoot ? "on foot" : "driving",
+        vehicle: S ? (S.onFoot ? "on foot" : S.vehicleName) : "",
+        save: S && !S.done ? S : null,
+        account
+      }).catch(() => {});
+    }, 50);
+  }
+
+  async function adoptTraveler(name) {
+    store.set("ome-name", name);
+    if (!SYNC.enabled) return null;
+    try {
+      const row = await SYNC.load(name);
+      if (!row) return null;
+      if (row.account) {
+        account = Object.assign(account, row.account);
+        saveAccount();
+      }
+      if (row.save) store.set(SAVE_KEY, row.save);
+      return row;
+    } catch (e) { return null; }
+  }
+
+  async function renderBoard() {
+    const list = $("boardList");
+    list.replaceChildren();
+    $("boardNote").textContent = SYNC.enabled ? "Loading…" : "The board needs the hosted version of the game.";
+    if (!SYNC.enabled) return;
+    try {
+      const rows = await SYNC.board();
+      if (!rows.length) { $("boardNote").textContent = "Nobody has set out yet."; return; }
+      $("boardNote").textContent = `${SYNC.group === "family" ? "Family" : SYNC.group} · furthest east`;
+      list.replaceChildren(...rows.map(r => {
+        const d = document.createElement("div");
+        d.className = "sum-row";
+        const who = document.createElement("span");
+        who.textContent = `${r.name}${r.arrivals ? " ★" : ""}`;
+        const what = document.createElement("b");
+        const far = (r.best_mile || 0).toLocaleString();
+        what.textContent = r.arrivals
+          ? `reached Boston · best ${far} mi`
+          : `${(r.mile || 0).toLocaleString()} mi in · day ${r.day || 1} · ${r.status || "on the road"}`;
+        d.append(who, what);
+        return d;
+      }));
+    } catch (e) {
+      $("boardNote").textContent = "Couldn't reach the board.";
+    }
+  }
   function resume() {
     const s = store.get(SAVE_KEY);
     if (!s) return false;
@@ -908,7 +1205,27 @@
   }
 
   // ---------------------------------------------------------------- wiring
-  $("btnNew").addEventListener("click", () => { store.clear(SAVE_KEY); startCreate(); });
+  $("btnNew").addEventListener("click", () => { store.clear(SAVE_KEY); startCreate(); $("travelerName").value = travelerName(); });
+  $("btnBoard").addEventListener("click", () => {
+    const panel = $("boardPanel");
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) renderBoard();
+  });
+  $("btnWhoami").addEventListener("click", async () => {
+    const name = ($("whoName").value || "").trim().slice(0, 24);
+    if (!name) return flash("Type a name first.");
+    $("whoNote").textContent = "Looking for " + name + "…";
+    const row = await adoptTraveler(name);
+    if (row && row.save) {
+      $("whoNote").textContent = `Found ${row.name}: ${Math.round(row.save.mile)} miles in, day ${row.day}. Tap Resume.`;
+      $("btnResume").hidden = false;
+    } else if (row) {
+      $("whoNote").textContent = `Welcome back, ${row.name}. No run in progress — start a new one.`;
+    } else {
+      $("whoNote").textContent = SYNC.enabled ? `Travelling as ${name}. Your progress will follow this name.` : `Playing as ${name} on this device.`;
+    }
+    renderBoard();
+  });
   $("btnResume").addEventListener("click", resume);
   $("btnAccount").addEventListener("click", () => { renderAccount(); $("accountPanel").hidden = !$("accountPanel").hidden; });
   $("btnBegin").addEventListener("click", beginRun);
@@ -941,6 +1258,7 @@
     $("btnResume").hidden = !store.get(SAVE_KEY);
     renderAccount();
   }
+  $("whoName").value = travelerName();
   refreshTitle();
   show("title");
   draw(0);

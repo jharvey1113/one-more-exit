@@ -18,6 +18,12 @@ Phoenix to Boston: 2,762 miles across a country that mostly still works. Power c
 - An adaptive score that follows the road, turning ominous on its own
 - Autosave, arrival summary, memorials, achievements, and an account that persists across runs
 
+## Travelers and the family board
+
+Type your name on the title screen and your progress follows the name rather than the device: the same name on a phone and a laptop continues the same road. A shared family board shows how far everyone has got. This needs one Supabase table (`ome_travelers`); without it the game still plays, saving locally.
+
+Other groups get their own board with `?group=name`, and `?solo` turns sharing off.
+
 ## Structure
 
 | File | What it is |
@@ -25,6 +31,8 @@ Phoenix to Boston: 2,762 miles across a country that mostly still works. Power c
 | `index.html` | Screens and styling (highway-sign look) |
 | `js/content.js` | All content: route, vehicles, careers, items, events, achievements |
 | `js/game.js` | Engine: travel, event selection, stops, saving, drawing |
+| `js/music.js` | Adaptive score that follows region, night and trouble |
+| `js/sync.js` | Name-based progress sync and the family board |
 
 Content is deliberately separate from logic. Events are data records with requirements, weights, choices and outcomes, shaped like the Supabase tables they are meant to live in, so new encounters can be written without touching the engine.
 

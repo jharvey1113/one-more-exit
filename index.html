@@ -161,7 +161,24 @@
       <button class="btn" id="btnNew" type="button">New run</button>
       <button class="btn ghost" id="btnResume" type="button" hidden>Resume</button>
       <button class="btn ghost small" id="btnAccount" type="button">Traveler file</button>
+      <button class="btn ghost small" id="btnBoard" type="button">Family board</button>
       <button class="btn ghost small" id="btnMusic" type="button" aria-pressed="true">Music on</button>
+    </div>
+
+    <div class="sign exit">
+      <h2 style="margin:0 0 8px">Who's travelling?</h2>
+      <p style="margin:0 0 10px;color:#cfe6d6;font-size:14px">Type your name and your road follows you — same name, any phone or computer.</p>
+      <div class="row">
+        <input type="text" id="whoName" maxlength="24" placeholder="Your name" autocomplete="nickname">
+        <button class="btn small" id="btnWhoami" type="button">That's me</button>
+      </div>
+      <p style="margin:8px 0 0;color:#cfe6d6;font-size:13px" id="whoNote"></p>
+    </div>
+
+    <div class="sign" id="boardPanel" hidden>
+      <h2>Family board</h2>
+      <p style="margin:0 0 8px;color:#cfe6d6;font-size:13px" id="boardNote"></p>
+      <div id="boardList"></div>
     </div>
 
     <div class="sign exit" id="accountPanel" hidden>
@@ -283,6 +300,7 @@
 <div class="flash" id="flash"></div>
 
 <script src="js/content.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/music.js"></script>
 <script src="js/game.js"></script>
 </body>
